@@ -13,6 +13,7 @@
       <header class="admin-header">
         <h2>📊 班級數據中心 (導師專用)</h2>
         <div class="header-buttons">
+          <button @click="currentTab = 'today'" :class="{ active: currentTab === 'today' }">☀️ 今日待辦</button>
           <button @click="currentTab = 'board'" :class="{ active: currentTab === 'board' }">📢 家長須知事項推播</button>          
           <button @click="currentTab = 'parentAnnouncements'" :class="{ active: currentTab === 'parentAnnouncements' }">📌 家長公佈欄</button>
           
@@ -23,7 +24,7 @@
           <button @click="currentTab = 'classNotes'" :class="{ active: currentTab === 'classNotes' }">⚡ 今日班級注意事項管理</button>
           <button @click="currentTab = 'contact'" :class="{ active: currentTab === 'contact' }">⭐ 今日聯絡簿管理</button>
 
-          <button @click="currentTab = 'messages'" :class="{ active: currentTab === 'messages' }">💬 家長和學生私訊管理</button>
+          <button @click="todoThread = ''; currentTab = 'messages'" :class="{ active: currentTab === 'messages' }">💬 家長和學生私訊管理</button>
           <button @click="currentTab = 'attendance'" :class="{ active: currentTab === 'attendance' }">⏰ 學生遲到管理</button>
           <button @click="currentTab = 'homework'" :class="{ active: currentTab === 'homework' }">📚 作業繳交推播與科任密碼設定</button>
           <button @click="currentTab = 'students'" :class="{ active: currentTab === 'students' }">👩‍🎓 學生資料名單管理</button>
@@ -55,6 +56,7 @@
       </header>
 
       <main class="data-table">
+        <AdminTodayTodos v-if="currentTab === 'today'" @open-message="openTodoMessage" @open-attendance="currentTab = 'attendance'" />
         <AdminAttendance v-if="currentTab === 'attendance'" />
         <AdminHomework v-if="currentTab === 'homework'" />
         <AdminClassNotes v-if="currentTab === 'classNotes'" />
@@ -66,7 +68,7 @@
         <AdminGoodArticles v-if="currentTab === 'goodArticles'" />
 
         <AdminAnnouncements v-if="currentTab === 'announcements'" />
-        <AdminMessages v-if="currentTab === 'messages'" />
+        <AdminMessages v-if="currentTab === 'messages'" :initial-thread="todoThread" />
         <AdminStudents v-if="currentTab === 'students'" />
         <AdminSecurity v-if="currentTab === 'security'" />
         <AdminVisitors v-if="currentTab === 'visitors'" />
@@ -98,7 +100,12 @@ import { ref, onMounted } from 'vue'
 const supabase = useSupabaseClient()
 const isUnlocked = ref(false)
 const passwordInput = ref('')
-const currentTab = ref('board')
+const currentTab = ref('today')
+const todoThread = ref('')
+const openTodoMessage = (message) => {
+  todoThread.value = `${message.student_id}_${message.chat_type}`
+  currentTab.value = 'messages'
+}
 
 onMounted(() => {
   if (sessionStorage.getItem('main_admin_logged_in') === 'true') {
