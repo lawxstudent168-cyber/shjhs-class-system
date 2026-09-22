@@ -4,6 +4,7 @@
     <div v-if="!isUnlocked" class="lock-screen">
       <div class="lock-box">
         <h2>📚 各科作業登記系統</h2>
+        <NuxtLink v-if="route.query.assignment" to="/admin" class="back-link">⬅️ 返回今日待辦</NuxtLink>
         <select v-model="selectedSubject" class="subject-select">
           <option value="" disabled selected>請選擇科目或身分...</option>
           <option value="導師">👑 導師專區 (總覽全科)</option>
@@ -25,6 +26,7 @@
             目前身分：{{ activeRole }}
           </span>
         </div>
+        <NuxtLink v-if="route.query.assignment" to="/admin" class="back-link">⬅️ 返回今日待辦</NuxtLink>
         <button @click="logout" class="back-btn">⬅️ 登出返回</button>
       </header>
 
@@ -238,6 +240,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 const supabase = useSupabaseClient()
+const route = useRoute()
 
 // === 共用狀態 ===
 const teachersList = ref([]); const selectedSubject = ref(''); const passwordInput = ref('')
@@ -350,7 +353,12 @@ const fetchDashboardData = async () => {
   let query = supabase.from('assignments').select('*').order('created_at', { ascending: false })
   if (activeRole.value !== '導師') query = query.eq('subject_name', selectedSubject.value)
   const { data: aData } = await query
-  if (aData) assignments.value = aData
+  if (aData) {
+    assignments.value = aData
+    if (!currentAssignment.value && typeof route.query.assignment === 'string') {
+      currentAssignment.value = aData.find(a => String(a.id) === route.query.assignment) || null
+    }
+  }
 
   const { data: subData } = await supabase.from('assignment_submissions').select('*')
   if (subData) allSubmissions.value = subData

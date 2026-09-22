@@ -190,6 +190,7 @@ const supabase = useSupabaseClient()
 
 const students = ref([])
 const allMessages = ref([])
+const props = defineProps({ initialThread: { type: String, default: '' } })
 const activeChatThread = ref('')
 const replyContent = ref('')
 const isSending = ref(false)
@@ -284,6 +285,10 @@ const fetchRecipients = async () => {
 onMounted(async () => {
   await fetchData()
   await fetchRecipients()
+  if (props.initialThread) {
+    activeChatThread.value = props.initialThread
+    await markCurrentThreadAsRead()
+  }
 })
 
 watch(activeChatThread, (newVal) => {
@@ -300,7 +305,7 @@ const selectedRecipientsCount = computed(() => availableRecipients.value.filter(
 const filteredMessages = computed(() => {
   if (!activeChatThread.value) return []
   const [targetId, targetType] = activeChatThread.value.split('_')
-  return allMessages.value.filter(m => m.student_id === targetId && m.chat_type === targetType)
+  return allMessages.value.filter(m => String(m.student_id) === String(targetId) && m.chat_type === targetType)
 })
 
 const getMsgBadge = (studentId, type) => {
