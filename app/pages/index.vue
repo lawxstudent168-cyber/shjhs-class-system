@@ -17,6 +17,7 @@
       <div v-if="!isIpBrownlisted" class="identity-banner">
         <span v-if="currentIdentity !== '匿名來訪者'">✅ 目前驗證身分：{{ currentIdentity }}</span>
         <span v-else>⚠️ 尚未驗證身分</span>
+        <NuxtLink to="/personal" class="change-id-btn">學生／家長個人首頁</NuxtLink>
         <button @click="showIdentityModal = true" class="change-id-btn">切換/綁定身分</button>
       </div>
 

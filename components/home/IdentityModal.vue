@@ -60,6 +60,7 @@
       </div>
 
       <p v-if="idError" class="error-msg">{{ idError }}</p>
+      <p><NuxtLink to="/personal">前往學生／家長個人首頁 →</NuxtLink></p>
 
       <div class="pwd-actions id-actions">
         <button v-if="hasCurrentIdentity" @click="$emit('close')" class="cancel-btn">取消</button>
