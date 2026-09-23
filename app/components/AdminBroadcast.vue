@@ -1,5 +1,6 @@
 <template>
   <div class="admin-section">
+    <AdminStudentBroadcast />
     <div class="header-box">
       <h3>📡 教室廣播遙控與定時系統</h3>
       <p class="help-text">💡 本系統可將文字與音效遠端傳送至班級首頁。為解決學校共用 IP 問題，請在首頁點擊設定「廣播設備名稱」（如：701教室），並在此指定名稱即可單獨發送。</p>
