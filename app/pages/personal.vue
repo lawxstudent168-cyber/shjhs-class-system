@@ -59,6 +59,7 @@
         </div>
 
         <nav class="quick-links" aria-label="常用功能">
+          <NuxtLink v-if="dashboard.role === 'student'" to="/student-broadcast">學生手機廣播 ↗</NuxtLink>
           <NuxtLink :to="dashboard.role === 'parent' ? '/parent-message' : '/student-message'">私訊導師 ↗</NuxtLink>
           <NuxtLink v-if="dashboard.role === 'parent'" to="/leave-application">填寫請假通知 ↗</NuxtLink>
           <NuxtLink to="/">班級公共看板 ↗</NuxtLink>
@@ -125,6 +126,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { broadcastStop } from '../utils/broadcastStop.js'
 useHead({ title: '學生與家長個人首頁', meta: [{ name: 'robots', content: 'noindex, nofollow' }] })
 const dashboard = ref(null)
 const loading = ref(true)
@@ -170,6 +172,7 @@ async function loadDashboard(id, initial = false) {
 }
 
 async function login() {
+  broadcastStop()
   if (loading.value) return
   loading.value = true
   signingIn.value = true
@@ -190,6 +193,7 @@ async function login() {
 }
 
 function startVerification(role) {
+  broadcastStop()
   clearCredentials()
   form.role = role
   form.seatNumber = ''
@@ -198,6 +202,7 @@ function startVerification(role) {
 }
 function cancelVerification() { clearCredentials(); error.value = ''; showLogin.value = false }
 async function logout() {
+  broadcastStop()
   loading.value = true
   error.value = ''
   try {
