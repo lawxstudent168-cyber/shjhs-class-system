@@ -4,8 +4,8 @@
     
     <!-- 密碼設定區塊 -->
     <div class="settings-section">
-      <h4>🔑 後台解鎖與推播密碼模式</h4>
-      <p class="help-text">💡 提示：為避免設定錯誤導致您永遠無法登入，系統已保留 <strong>168168168</strong> 作為永久萬用救援密碼。</p>
+      <h4>🔑 其他舊功能與推播密碼模式</h4>
+      <p class="help-text">導師後台與手機廣播使用 Vercel 的 NUXT_TEACHER_LOGIN_PASSWORD，下列舊功能密碼設定不會變更導師登入密碼。</p>
       
       <div class="radio-group">
         <label>

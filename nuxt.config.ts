@@ -4,7 +4,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Server-only. Configure NUXT_PERSONAL_HOME_SECRET in Vercel.
     personalHomeSecret: '',
-    studentBroadcastAdminKey: '',
+    teacherLoginPassword: '',
     studentBroadcastSupabaseUrl: '',
     studentBroadcastServiceKey: ''
   },

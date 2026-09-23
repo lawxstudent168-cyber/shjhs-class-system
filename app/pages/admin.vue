@@ -4,7 +4,8 @@
       <div class="lock-box">
         <h2>🔒 導師專屬後台</h2>
         <input v-model="passwordInput" type="password" placeholder="請輸入密碼..." @keyup.enter="verifyPassword" />
-        <button @click="verifyPassword">解鎖進入</button>
+        <button :disabled="authBusy" @click="verifyPassword">{{ authBusy ? '驗證中…' : '登入' }}</button>
+        <p v-if="authError" role="alert">{{ authError }}</p>
         <NuxtLink to="/" class="back-link">⬅️ 返回首頁</NuxtLink>
       </div>
     </div>
@@ -97,7 +98,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 
+const authBusy = ref(true)
 const supabase = useSupabaseClient()
+const authError = ref('')
+const teacherSession = body => $fetch('/api/teacher-session', { method: 'POST', body, retry: 0, timeout: 5000 })
 const isUnlocked = ref(false)
 const passwordInput = ref('')
 const currentTab = ref('today')
@@ -107,56 +111,56 @@ const openTodoMessage = (message) => {
   currentTab.value = 'messages'
 }
 
-onMounted(() => {
-  if (sessionStorage.getItem('main_admin_logged_in') === 'true') {
+onMounted(async () => {
+  // A browser storage flag alone never grants teacher access.
+  sessionStorage.removeItem('main_admin_logged_in')
+  try {
+    await teacherSession({ action: 'status' })
     isUnlocked.value = true
-  }
+  } catch {}
+  finally { authBusy.value = false }
 })
 
 const verifyPassword = async () => {
+  if (authBusy.value) return
+  authBusy.value = true
+  authError.value = ''
   try {
-    const { data } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'admin_password').maybeSingle()
-    let expectedPwd = '168168168' 
-    if (data?.setting_value) {
-      const config = data.setting_value
-      if (config.type === 'dynamic') {
-        const d = new Date()
-        const yy = String(d.getFullYear()).slice(2)
-        const mm = String(d.getMonth() + 1).padStart(2, '0')
-        const dd = String(d.getDate()).padStart(2, '0')
-        expectedPwd = `${yy}${mm}${dd}59`
-      } else if (config.type === 'custom' && config.custom_pwd) {
-        expectedPwd = config.custom_pwd
-      }
-    }
-    if (passwordInput.value === expectedPwd || passwordInput.value === '168168168') {
-      isUnlocked.value = true
-      sessionStorage.setItem('main_admin_logged_in', 'true') 
+    await teacherSession({ action: 'login', password: passwordInput.value })
+    isUnlocked.value = true
+    // Preserve the existing best-effort teacher visit record after successful login.
+    void (async () => {
       try {
-        const ipRes = await fetch('https://api.ipify.org?format=json')
-        const { ip } = await ipRes.json()
+        const response = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(3000) })
+        const { ip } = await response.json()
         await supabase.from('visitor_logs').insert([{ ip_address: ip, device_info: navigator.userAgent, role: '導師' }])
-      } catch(e) {}
-    } else { alert('❌ 密碼錯誤！') }
-  } catch (e) {
-    if (passwordInput.value === '168168168') {
-      isUnlocked.value = true
-      sessionStorage.setItem('main_admin_logged_in', 'true') 
-    } else { alert('❌ 密碼錯誤或無法連線至設定檔！') }
+      } catch {}
+    })()
+  } catch (error) {
+    const status = error?.statusCode || error?.response?.status
+    authError.value = status === 429 ? '嘗試次數過多，請 15 分鐘後再試。'
+      : status === 503 ? '導師登入尚未設定，請設定 Vercel 的 NUXT_TEACHER_LOGIN_PASSWORD 與 NUXT_PERSONAL_HOME_SECRET。'
+      : status === 401 ? '密碼錯誤，請輸入導師登入密碼。' : '無法登入，請確認連線後重試。'
+  } finally {
+    passwordInput.value = ''
+    authBusy.value = false
   }
 }
 
-const handleLogout = () => {
-  isUnlocked.value = false
-  passwordInput.value = ''
-  sessionStorage.removeItem('main_admin_logged_in')
-  
-  sessionStorage.removeItem('exams_admin_logged_in')
-  sessionStorage.removeItem('hygiene_admin_logged_in')
-  sessionStorage.removeItem('schedule_admin_logged_in')
-  
-  alert('✅ 已成功登出導師帳號！')
-  navigateTo('/')
+const handleLogout = async () => {
+  if (authBusy.value) return
+  authBusy.value = true
+  try {
+    await teacherSession({ action: 'logout' })
+    isUnlocked.value = false
+    passwordInput.value = ''
+    for (const key of ['main_admin_logged_in', 'exams_admin_logged_in', 'hygiene_admin_logged_in', 'schedule_admin_logged_in']) {
+      sessionStorage.removeItem(key)
+    }
+    await navigateTo('/')
+  } catch {
+    alert('登出尚未完成，請恢復連線後重試。')
+  } finally { authBusy.value = false }
 }
 </script>
 

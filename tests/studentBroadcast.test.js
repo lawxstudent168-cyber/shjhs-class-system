@@ -1,17 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { requireStudent, requireBroadcastAdmin, validLease, hash, token, cleanText } from '../server/utils/studentBroadcast.js'
+import { requireStudent, validLease, hash, token, cleanText } from '../server/utils/studentBroadcast.js'
 
 test('parents and ambiguous identities never obtain a student broadcast identity', () => {
   for (const session of [null, { role: 'parent', studentIds: ['a'] }, { role: 'student', studentIds: ['a', 'b'] }]) assert.throws(() => requireStudent(session))
   assert.equal(requireStudent({ role: 'student', studentIds: ['a'] }), 'a')
-})
-test('management requires a configured, exact, separate server secret', () => {
-  const key = token()
-  assert.throws(() => requireBroadcastAdmin(key, ''))
-  assert.throws(() => requireBroadcastAdmin('1234', key))
-  assert.throws(() => requireBroadcastAdmin(undefined, key))
-  requireBroadcastAdmin(key, key)
 })
 test('leases fail closed on revocation, expiry, session change or token mismatch', () => {
   const lease = token(), now = Date.now()

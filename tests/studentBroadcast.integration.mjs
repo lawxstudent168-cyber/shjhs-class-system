@@ -40,7 +40,7 @@ test('broadcast API: approval, active recipient, parent denial, revoke and stale
   const app = spawn(process.execPath, ['.output/server/index.mjs'], { env: { ...process.env,
     HOST: '127.0.0.1', PORT: String(port), NUXT_PUBLIC_SUPABASE_URL: personal.url,
     NUXT_PUBLIC_SUPABASE_KEY: 'fixture-public-key', NUXT_PERSONAL_HOME_SECRET: secret,
-    NUXT_STUDENT_BROADCAST_ADMIN_KEY: key, NUXT_STUDENT_BROADCAST_SERVICE_KEY: 'fixture-service-key',
+    NUXT_TEACHER_LOGIN_PASSWORD: key, NUXT_STUDENT_BROADCAST_SERVICE_KEY: 'fixture-service-key',
     NUXT_STUDENT_BROADCAST_SUPABASE_URL: `http://127.0.0.1:${db.address().port}`
   }, stdio: 'ignore' })
   t.after(async () => { app.kill(); for (const server of [db, personal.server]) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) } })
@@ -56,7 +56,17 @@ test('broadcast API: approval, active recipient, parent denial, revoke and stale
     method: 'POST', headers: { origin, 'content-type': 'application/json', cookie: `${cookie}; ${device}`, ...headers }, body: JSON.stringify(body)
   })
   const receive = (body, cookie = student, headers = {}) => request('personal-home/broadcast', body, cookie, headers)
-  const admin = (body, supplied = key) => request('student-broadcast-admin', body, '', { 'x-broadcast-key': supplied })
+  let teacherCookie = ''
+  const admin = body => request('student-broadcast-admin', body, teacherCookie)
+  assert.equal((await admin({ action: 'list' })).status, 401)
+  assert.equal((await request('student-broadcast-admin', { action: 'list' }, parent, { 'x-broadcast-key': key })).status, 401)
+  assert.equal((await request('teacher-session', { action: 'login', password: '168168168' }, '')).status, 401)
+  assert.equal((await request('teacher-session', { action: 'login', password: key }, '', { origin: 'https://evil.test' })).status, 403)
+  const login = await request('teacher-session', { action: 'login', password: key }, '')
+  assert.equal(login.status, 200)
+  assert.match(login.headers.get('set-cookie'), /HttpOnly/)
+  teacherCookie = login.headers.get('set-cookie').split(';')[0]
+  assert.equal((await request('teacher-session', { action: 'status' }, teacherCookie)).status, 200)
   assert.equal((await receive({ action: 'enroll', label: 'Parent phone' }, parent)).status, 403)
   assert.equal(rows.length, 0)
   assert.equal((await receive({ action: 'enroll', label: 'Phone' }, '')).status, 401)
@@ -66,7 +76,6 @@ test('broadcast API: approval, active recipient, parent denial, revoke and stale
   assert.match(response.headers.get('set-cookie'), /HttpOnly/)
   const { id } = await response.json()
   assert.equal((await receive({ action: 'start' })).status, 403)
-  assert.equal((await admin({ action: 'list' }, 'wrong')).status, 403)
   assert.equal((await admin({ action: 'approve', id })).status, 400)
   assert.equal((await admin({ action: 'approve', id, confirmStudentOnly: true })).status, 200)
   assert.deepEqual(await (await admin({ action: 'send', id, text: 'Before listening' })).json(), { delivered: 0 })
@@ -96,5 +105,13 @@ test('broadcast API: approval, active recipient, parent denial, revoke and stale
   await admin({ action: 'approve', id, confirmStudentOnly: true })
   const final = await (await receive({ action: 'start' })).json()
   await receive({ action: 'stop', lease: final.lease })
+  const logout = await request('teacher-session', { action: 'logout' }, teacherCookie)
+  assert.match(logout.headers.get('set-cookie'), /Max-Age=0/)
+  teacherCookie = ''
+  assert.equal((await admin({ action: 'list' })).status, 401)
+  for (let i = 0; i < 10; i++) {
+    assert.equal((await request('teacher-session', { action: 'login', password: 'incorrect' }, '')).status, 401)
+  }
+  assert.equal((await request('teacher-session', { action: 'login', password: key }, '')).status, 429)
   assert.equal((await receive({ action: 'poll', lease: final.lease })).status, 403)
 })
