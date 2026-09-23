@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { privateResponse, checkPersonalRequest } from '../utils/personalHomeHttp.js'
-import { requireBroadcastAdmin, deviceStore, cleanText } from '../utils/studentBroadcast.js'
+import { deviceStore, cleanText } from '../utils/studentBroadcast.js'
+import { requireTeacherSession } from '../utils/teacherSession.js'
 
 export default defineEventHandler(async event => {
   privateResponse(event)
   checkPersonalRequest(event)
   const config = useRuntimeConfig(event)
-  requireBroadcastAdmin(getHeader(event, 'x-broadcast-key'), config.studentBroadcastAdminKey)
+  requireTeacherSession(event, config)
   const body = await readBody(event)
   const store = (method, filters, data) => deviceStore(config, method, filters, data)
   if (body?.action === 'list') {

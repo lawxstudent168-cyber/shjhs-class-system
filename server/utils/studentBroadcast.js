@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { createError } from 'h3'
 
 export const LEASE_MS = 15 * 60 * 1000
@@ -9,12 +9,6 @@ export function requireStudent(session) {
     throw createError({ statusCode: 403, statusMessage: 'Student identity required' })
   }
   return session.studentIds[0]
-}
-export function requireBroadcastAdmin(key, expected) {
-  if (typeof expected !== 'string' || expected.length < 32) throw createError({ statusCode: 503, statusMessage: 'Broadcast is not configured' })
-  if (typeof key !== 'string' || key.length > 256 || !timingSafeEqual(Buffer.from(hash(key)), Buffer.from(hash(expected)))) {
-    throw createError({ statusCode: 403, statusMessage: 'Invalid broadcast management key' })
-  }
 }
 export function validLease(row, sessionHash, lease, now = Date.now()) {
   return row?.status === 'approved' && row.session_hash === sessionHash &&

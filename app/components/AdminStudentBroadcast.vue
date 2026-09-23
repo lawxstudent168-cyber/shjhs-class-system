@@ -3,9 +3,7 @@
     <h3>學生手機廣播（獨立通道）</h3>
     <p>只向已核准、正在專用頁收聽的學生裝置送出文字及提示音。此處不會發送到教室首頁或家長頁面。</p>
     <form @submit.prevent="load">
-      <label>手機廣播管理金鑰 <input v-model="key" type="password" autocomplete="off" required></label>
-      <button :disabled="busy">解鎖／更新清單</button>
-      <button type="button" @click="lock">鎖定</button>
+      <button :disabled="busy">更新清單</button>
     </form>
     <p role="status">{{ notice }}</p>
     <template v-if="unlocked">
@@ -32,18 +30,18 @@
   </section>
 </template>
 <script setup>
-import { ref, onBeforeUnmount } from 'vue'
-const key = ref(''), devices = ref([]), unlocked = ref(false), confirmed = ref(false), target = ref(''), text = ref(''), notice = ref(''), busy = ref(false)
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+const devices = ref([]), unlocked = ref(false), confirmed = ref(false), target = ref(''), text = ref(''), notice = ref(''), busy = ref(false)
 const labels = { pending: '待核准', approved: '已核准', revoked: '已撤銷' }
 let epoch = 0
 const active = d => d.status === 'approved' && Date.parse(d.expires_at) > Date.now() && Date.parse(d.heartbeat_at) > Date.now() - 5000
-const api = body => $fetch('/api/student-broadcast-admin', { method: 'POST', headers: { 'x-broadcast-key': key.value }, body, retry: 0, timeout: 5000 })
-function lock() { epoch++; key.value = ''; devices.value = []; unlocked.value = false; confirmed.value = false; target.value = ''; text.value = ''; notice.value = ''; busy.value = false }
+const api = body => $fetch('/api/student-broadcast-admin', { method: 'POST', body, retry: 0, timeout: 5000 })
+function lock() { epoch++; devices.value = []; unlocked.value = false; confirmed.value = false; target.value = ''; text.value = ''; notice.value = ''; busy.value = false }
 async function run(fn) {
   if (busy.value) return
   const current = epoch
   busy.value = true
-  try { await fn(current) } catch { if (current === epoch) { devices.value = []; unlocked.value = false; notice.value = '操作失敗。請檢查管理金鑰、部署設定及連線。' } }
+  try { await fn(current) } catch (error) { if (current === epoch) { devices.value = []; unlocked.value = false; notice.value = (error?.statusCode || error?.response?.status) === 401 ? '導師登入已到期，請重新整理頁面並登入。' : '操作失敗。請檢查部署設定及連線。' } }
   finally { if (current === epoch) busy.value = false }
 }
 async function refresh(current) { const result = await api({ action: 'list' }); if (current === epoch) { devices.value = result; unlocked.value = true } }
@@ -60,6 +58,7 @@ const send = () => run(async current => {
   notice.value = result.delivered ? '已送出 1 台。請與學生確認是否收到。' : '未送出：裝置未在收聽或核准已撤銷。'
   await refresh(current)
 })
+onMounted(load)
 onBeforeUnmount(lock)
 </script>
 <style scoped>

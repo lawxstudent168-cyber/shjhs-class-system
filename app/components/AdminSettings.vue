@@ -4,8 +4,8 @@
     
     <!-- 密碼設定區塊 -->
     <div class="settings-section">
-      <h4>🔑 後台解鎖與推播密碼模式</h4>
-      <p class="help-text">💡 提示：為避免設定錯誤導致您永遠無法登入，系統已保留 <strong>168168168</strong> 作為永久萬用救援密碼。</p>
+      <h4>🔑 其他舊功能與推播密碼模式</h4>
+      <p class="help-text">導師後台使用台灣今日日期 YYMMDD＋59 的動態密碼，登入後可直接管理手機廣播，不需設定 Vercel 登入密碼。下列設定僅適用其他舊功能。</p>
       
       <div class="radio-group">
         <label>
