@@ -7,14 +7,17 @@
 1. 在與個人首頁相同的 Supabase 專案執行 `supabase/migrations/202609230001_student_broadcast.sql`。新增一張表，不改既有學生資料。RLS 開啟且撤銷 anon/authenticated 權限；不要為此表新增公開 policy。
 2. Vercel 設定以下 **伺服器端**環境變數，重新部署：
    - `NUXT_PERSONAL_HOME_SECRET`：沿用個人首頁的至少 32 字元隨機金鑰。
-   - `NUXT_TEACHER_LOGIN_PASSWORD`：設定至少 12 字元的導師專用登入密碼，只需在 `/admin` 登入時輸入一次。伺服器驗證後以 HttpOnly cookie 保持登入 2 小時；不再接受舊的公開萬用密碼或日期密碼。
    - `NUXT_STUDENT_BROADCAST_SUPABASE_URL`：同一 Supabase 的 HTTPS project URL。
    - `NUXT_STUDENT_BROADCAST_SERVICE_KEY`：該專案的 server secret 或 service_role key。此金鑰具有資料庫特權，僅存 Vercel 伺服器環境；不可放在 `NUXT_PUBLIC_*`、Git 或網頁輸入欄。
 3. 先在測試部署用測試學生及專用手機驗收，再正式啟用。不要把正式 service key 提供給不可信的預覽分支。
 
 多個 Vercel 使用同一 Supabase 時，會共用裝置清單；不同網域的 cookie 分離，學生在另一網域必須重新申請裝置。建議固定單一正式網域用於收聽，測試使用獨立 Supabase。
 
-升級本修正不需要新增 SQL。原 `NUXT_STUDENT_BROADCAST_ADMIN_KEY` 已不再使用，可從 Vercel 移除；`NUXT_STUDENT_BROADCAST_SERVICE_KEY` 仍須保留。新增登入密碼後重新部署，舊瀏覽器登入標記不再授權，導師需重新登入一次。後台「系統密碼設定」的舊密碼模式只適用於其他舊功能。
+導師登入沿用「台灣今日日期 YYMMDD＋59」動態密碼，由伺服器以 Asia/Taipei 計算。例如 2026/09/23 為 26092359。不需設定 Vercel 登入密碼。登入有效兩小時，跨台灣午夜會失效，需使用新日期密碼重新登入。
+
+升級本修正不需要新增 SQL。`NUXT_TEACHER_LOGIN_PASSWORD` 與 `NUXT_STUDENT_BROADCAST_ADMIN_KEY` 均不使用，可從 Vercel 移除；既有 `NUXT_PERSONAL_HOME_SECRET`（用於簽署 cookie，並非登入密碼）與 Supabase 連線設定仍須保留。重新部署後，導師需重新登入一次。後台「系統密碼設定」的舊密碼模式只適用於其他舊功能。
+
+日期密碼規則可被推算；伺服器 session 與限流不會讓此規則變成秘密。本次依既有使用方式保留日期密碼，並未恢復公開萬用密碼。
 
 本修正保護導師後台入口與手機廣播 API，沒有替換其他舊功能直接存取 Supabase 的資料權限；不代表完成全站權限改造。
 
@@ -26,7 +29,7 @@
 4. 導師登入後直接開啟廣播區，清單自動載入；可按更新清單，選取正在收聽的裝置發送。需更新清單才能看到剛開始收聽的裝置；伺服器在送出當下再檢查。
 5. 停止按鈕、離開頁面、切背景、離線、登入或切换身分都會停止；同源其他分頁也會收到停止訊號。撤銷核准在下一次檢查生效，通常約 1 秒；網路延遲時最遲由 5 秒本地 watchdog 停止。短提示音本身最多 0.3 秒。
 
-每秒輪詢會產生 Vercel/Supabase 請求用量。每則通知僅保存最新一則、5 秒內有效，不排隊不補播。送出成功只表示寫入符合条件的接收裝置，不是「已聽見」回條。管理頁沒有額外金鑰欄，所有管理 API 檢查伺服器簽署的導師 session；登出清除 cookie。修改登入密碼或簽署金鑰會使舊 session 失效。
+每秒輪詢會產生 Vercel/Supabase 請求用量。每則通知僅保存最新一則、5 秒內有效，不排隊不補播。送出成功只表示寫入符合条件的接收裝置，不是「已聽見」回條。管理頁沒有額外金鑰欄，所有管理 API 檢查伺服器簽署的導師 session；登出清除 cookie。日期跨日或修改簽署金鑰會使舊 session 失效。
 
 ## 保證範圍與驗收
 

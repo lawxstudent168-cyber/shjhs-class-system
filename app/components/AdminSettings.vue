@@ -5,7 +5,7 @@
     <!-- 密碼設定區塊 -->
     <div class="settings-section">
       <h4>🔑 其他舊功能與推播密碼模式</h4>
-      <p class="help-text">導師後台與手機廣播使用 Vercel 的 NUXT_TEACHER_LOGIN_PASSWORD，下列舊功能密碼設定不會變更導師登入密碼。</p>
+      <p class="help-text">導師後台使用台灣今日日期 YYMMDD＋59 的動態密碼，登入後可直接管理手機廣播，不需設定 Vercel 登入密碼。下列設定僅適用其他舊功能。</p>
       
       <div class="radio-group">
         <label>

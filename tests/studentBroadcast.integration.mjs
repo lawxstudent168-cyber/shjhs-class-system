@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { startPersonalFixture } from './fixtures/personalSupabase.mjs'
 import { encodePersonalSession } from '../server/utils/personalHomeSession.js'
+import { dynamicTeacherPassword } from '../server/utils/teacherSession.js'
 
 test('broadcast API: approval, active recipient, parent denial, revoke and stale session', async t => {
   const personal = await startPersonalFixture()
@@ -36,11 +37,11 @@ test('broadcast API: approval, active recipient, parent denial, revoke and stale
   const probe = createServer(); await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
   const port = probe.address().port; await new Promise(resolve => probe.close(resolve))
   const secret = 'fixture-personal-secret-over-thirty-two-characters'
-  const key = 'fixture-management-secret-over-thirty-two-characters'
+  const key = dynamicTeacherPassword()
   const app = spawn(process.execPath, ['.output/server/index.mjs'], { env: { ...process.env,
     HOST: '127.0.0.1', PORT: String(port), NUXT_PUBLIC_SUPABASE_URL: personal.url,
     NUXT_PUBLIC_SUPABASE_KEY: 'fixture-public-key', NUXT_PERSONAL_HOME_SECRET: secret,
-    NUXT_TEACHER_LOGIN_PASSWORD: key, NUXT_STUDENT_BROADCAST_SERVICE_KEY: 'fixture-service-key',
+    NUXT_STUDENT_BROADCAST_SERVICE_KEY: 'fixture-service-key',
     NUXT_STUDENT_BROADCAST_SUPABASE_URL: `http://127.0.0.1:${db.address().port}`
   }, stdio: 'ignore' })
   t.after(async () => { app.kill(); for (const server of [db, personal.server]) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) } })

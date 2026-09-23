@@ -3,7 +3,7 @@
     <div v-if="!isUnlocked" class="lock-screen">
       <div class="lock-box">
         <h2>🔒 導師專屬後台</h2>
-        <input v-model="passwordInput" type="password" placeholder="請輸入密碼..." @keyup.enter="verifyPassword" />
+        <input v-model="passwordInput" type="password" placeholder="請輸入今日動態密碼" @keyup.enter="verifyPassword" />
         <button :disabled="authBusy" @click="verifyPassword">{{ authBusy ? '驗證中…' : '登入' }}</button>
         <p v-if="authError" role="alert">{{ authError }}</p>
         <NuxtLink to="/" class="back-link">⬅️ 返回首頁</NuxtLink>
@@ -139,8 +139,8 @@ const verifyPassword = async () => {
   } catch (error) {
     const status = error?.statusCode || error?.response?.status
     authError.value = status === 429 ? '嘗試次數過多，請 15 分鐘後再試。'
-      : status === 503 ? '導師登入尚未設定，請設定 Vercel 的 NUXT_TEACHER_LOGIN_PASSWORD 與 NUXT_PERSONAL_HOME_SECRET。'
-      : status === 401 ? '密碼錯誤，請輸入導師登入密碼。' : '無法登入，請確認連線後重試。'
+      : status === 503 ? '登入服務尚未完成設定，請確認既有的 NUXT_PERSONAL_HOME_SECRET。'
+      : status === 401 ? '密碼錯誤，請輸入台灣日期的今日動態密碼。' : '無法登入，請確認連線後重試。'
   } finally {
     passwordInput.value = ''
     authBusy.value = false
