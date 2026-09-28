@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { serverSupabaseClient } from '#supabase/server'
 import { verifyPersonalCredentials } from '../../utils/personalHomeData.js'
 import { extendPersonalSession } from '../../utils/personalHomeSession.js'
+import { bindBroadcastBrowser, forgetBroadcastBrowser } from '../../utils/studentBroadcast.js'
 import { personalSecret, privateResponse, checkPersonalRequest, readPersonalSession, writePersonalSession } from '../../utils/personalHomeHttp.js'
 
 // Per-instance backstop; shared deployments should also use Vercel rate limiting.
@@ -25,6 +26,13 @@ export default defineEventHandler(async event => {
   if (!identity) throw createError({ statusCode: 401, statusMessage: 'Identity verification failed' })
   attempts.delete(key)
   const session = extendPersonalSession(readPersonalSession(event, secret), identity, secret)
+  let broadcastBound = false
+  try {
+    if (identity.role === 'student') broadcastBound = await bindBroadcastBrowser(event, useRuntimeConfig(event), identity.studentId)
+    else await forgetBroadcastBrowser(event, useRuntimeConfig(event))
+  } catch {
+    // Binding failure must not prevent personal-home access; cookie was cleared first.
+  }
   writePersonalSession(event, session, secret)
-  return { studentId: identity.studentId }
+  return { studentId: identity.studentId, broadcastBound }
 })

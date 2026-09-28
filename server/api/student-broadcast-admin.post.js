@@ -1,6 +1,5 @@
-import { randomUUID } from 'node:crypto'
 import { privateResponse, checkPersonalRequest } from '../utils/personalHomeHttp.js'
-import { deviceStore, cleanText } from '../utils/studentBroadcast.js'
+import { allRows, broadcastStore, cleanText, validId } from '../utils/studentBroadcast.js'
 import { requireTeacherSession } from '../utils/teacherSession.js'
 
 export default defineEventHandler(async event => {
@@ -9,26 +8,35 @@ export default defineEventHandler(async event => {
   const config = useRuntimeConfig(event)
   requireTeacherSession(event, config)
   const body = await readBody(event)
-  const store = (method, filters, data) => deviceStore(config, method, filters, data)
-  if (body?.action === 'list') {
-    return await store('GET', { select: 'id,student_id,label,status,created_at,expires_at,heartbeat_at', order: 'created_at.desc', limit: '500' })
-  }
-  if (!/^[a-f0-9-]{36}$/.test(body?.id || '')) throw createError({ statusCode: 400, statusMessage: 'Select a device' })
-  if (['approve', 'revoke'].includes(body.action)) {
-    if (body.action === 'approve' && body.confirmStudentOnly !== true) throw createError({ statusCode: 400, statusMessage: 'Student-only device confirmation required' })
-    const rows = await store('PATCH', { id: `eq.${body.id}` }, {
-      status: body.action === 'approve' ? 'approved' : 'revoked', lease_hash: null, session_hash: null,
-      expires_at: null, heartbeat_at: null, message_id: null, message_text: null
+  if (!['list', 'send'].includes(body?.action)) throw createError({ statusCode: 400, statusMessage: 'Unknown action' })
+  const students = await allRows(config, 'students', { select: 'id,seat_number,real_name', order: 'seat_number.asc,id.asc' })
+  if (body.action === 'list') {
+    const clients = await allRows(config, 'student_broadcast_clients', {
+      select: 'id,student_id,last_seen_at', disabled_at: 'is.null', expires_at: `gt.${new Date().toISOString()}`, order: 'id.asc'
     })
-    return { updated: rows.length }
-  }
-  if (body.action === 'send') {
-    const text = cleanText(body.text, 200)
-    const now = Date.now()
-    const rows = await store('PATCH', { id: `eq.${body.id}`, status: 'eq.approved', expires_at: `gt.${new Date(now).toISOString()}`, heartbeat_at: `gt.${new Date(now - 5000).toISOString()}` }, {
-      message_id: randomUUID(), message_text: text, message_expires_at: new Date(now + 5000).toISOString()
+    return students.map(student => {
+      const bound = clients.filter(client => client.student_id === String(student.id))
+      return { ...student, browsers: bound.length, lastSeen: bound.map(client => client.last_seen_at).filter(Boolean).sort().at(-1) || null }
     })
-    return { delivered: rows.length }
   }
-  throw createError({ statusCode: 400, statusMessage: 'Unknown action' })
+  const text = cleanText(body.text, 200)
+  if (!validId(body.requestId)) throw createError({ statusCode: 400, statusMessage: 'Request ID required' })
+  let recipients
+  if (body.all === true) recipients = students
+  else {
+    if (!Array.isArray(body.studentIds) || !body.studentIds.length || body.studentIds.length > 500 || !body.studentIds.every(id => typeof id === 'string')) throw createError({ statusCode: 400, statusMessage: 'Select students' })
+    const ids = [...new Set(body.studentIds)]
+    recipients = students.filter(student => ids.includes(String(student.id)))
+    if (recipients.length !== ids.length) throw createError({ statusCode: 400, statusMessage: 'Unknown student' })
+  }
+  if (!recipients.length) throw createError({ statusCode: 400, statusMessage: 'No students' })
+  const created = Date.now()
+  const messages = recipients.map(student => ({
+    broadcast_id: body.requestId, student_id: String(student.id), text,
+    created_at: new Date(created).toISOString(), expires_at: new Date(created + 86400000).toISOString()
+  }))
+  // One atomic insert; retries with the same request ID cannot duplicate recipients.
+  await broadcastStore(config, 'student_broadcast_inbox', 'POST',
+    { on_conflict: 'broadcast_id,student_id' }, messages, 'resolution=ignore-duplicates,return=representation')
+  return { queued: recipients.length }
 })

@@ -213,6 +213,7 @@ import ControlPanel from '~~/components/home/ControlPanel.vue'
 import LargeScheduleModal from '~~/components/home/LargeScheduleModal.vue'
 import PasswordModal from '~~/components/home/PasswordModal.vue'
 import IdentityModal from '~~/components/home/IdentityModal.vue'
+import { broadcastStop } from '~/utils/broadcastStop.js'
 import IndexModulesPanel from '~~/components/home/IndexModulesPanel.vue'
 import HomeWikiFeatured from '~~/components/home/HomeWikiFeatured.vue'
 import HomeEnglishSong from '~~/components/home/HomeEnglishSong.vue'
@@ -355,6 +356,10 @@ const handlePwdSuccess = async ({ target, role }) => {
 }
 
 const handleIdentityVerified = async (finalIdentity) => {
+  // Legacy homepage names are not server-verified broadcast credentials.
+  broadcastStop()
+  try { await $fetch('/api/personal-home/broadcast', { method: 'POST', body: { action: 'disconnect' }, retry: 0 }) }
+  catch { alert('身分切換尚未完成，請恢復連線後重試。'); return }
   localStorage.setItem('visitor_known_identity', finalIdentity)
   currentIdentity.value = finalIdentity
   showIdentityModal.value = false

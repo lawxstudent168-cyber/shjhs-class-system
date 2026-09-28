@@ -64,6 +64,7 @@
           <NuxtLink v-if="dashboard.role === 'parent'" to="/leave-application">填寫請假通知 ↗</NuxtLink>
           <NuxtLink to="/">班級公共看板 ↗</NuxtLink>
         </nav>
+        <p v-if="broadcastBindingError" role="status">{{ broadcastBindingError }}</p>
         <p class="muted small">私訊與請假頁保留原有驗證程序。個人首頁只提供查閱，不會將訊息標為已讀。</p>
 
         <div class="columns">
@@ -119,16 +120,17 @@
           </aside>
         </div>
       </template>
-      <footer>使用共用裝置時，離開前請登出個人首頁。登入狀態最長保留 8 小時。</footer>
+      <footer>使用共用裝置時，離開前請登出個人首頁。個人首頁登入狀態最長保留 8 小時；學生廣播的瀏覽器綁定另保留 90 天，登出會一併解除。</footer>
     </div>
   </main>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
-import { broadcastStop } from '../utils/broadcastStop.js'
+import { broadcastStop, broadcastReady } from '../utils/broadcastStop.js'
 useHead({ title: '學生與家長個人首頁', meta: [{ name: 'robots', content: 'noindex, nofollow' }] })
 const dashboard = ref(null)
+const broadcastBindingError = ref('')
 const loading = ref(true)
 const signingIn = ref(false)
 const showLogin = ref(false)
@@ -179,10 +181,18 @@ async function login() {
   error.value = ''
   try {
     const result = await $fetch('/api/personal-home/session', { method: 'POST', body: { ...form }, retry: 0 })
+    if (form.role === 'student' && result.broadcastBound) broadcastReady()
     dashboard.value = null
     assignmentFilter.value = 'pending'
     signingIn.value = false
     await loadDashboard(result.studentId)
+    broadcastBindingError.value = form.role === 'student' && !result.broadcastBound
+      ? '學生身分已驗證，但廣播綁定尚未完成。請稍後重新驗證，或請導師確認廣播資料表與連線設定。' : ''
+    if (route.query.verify) {
+      const query = { ...route.query }
+      delete query.verify
+      await navigateTo({ path: route.path, query }, { replace: true })
+    }
     await nextTick()
     window.scrollTo({ top: 0 })
   } catch (err) {
@@ -216,7 +226,11 @@ async function logout() {
   } catch { error.value = '登出未完成，請恢復連線後再按一次登出。' }
   finally { loading.value = false }
 }
-onMounted(() => loadDashboard(undefined, true))
+const route = useRoute()
+onMounted(async () => {
+  await loadDashboard(undefined, true)
+  if (route.query.verify === 'student') startVerification('student')
+})
 </script>
 
 <style scoped>

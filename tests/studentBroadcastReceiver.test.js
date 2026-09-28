@@ -1,79 +1,86 @@
-// Execute the receiver's actual setup script with silent audio and deterministic timers.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import vm from 'node:vm'
+import { createBroadcastReceiver } from '../app/utils/studentBroadcastReceiver.js'
 
-const source = readFileSync(new URL('../app/pages/student-broadcast.vue', import.meta.url), 'utf8')
-  .match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '')
-function harness(role = 'student') {
-  const window = new EventTarget(), document = new EventTarget()
-  document.hidden = false
-  const timers = new Map(), calls = [], audio = []
-  let mounted, unmount, pending, timerId = 0
-  class SilentAudio {
-    constructor() { this.state = 'running'; this.currentTime = 0; this.beeps = 0; audio.push(this) }
-    async resume() {}
-    async close() { this.state = 'closed' }
-    createOscillator() { this.beeps++; return { frequency: {}, connect() {}, start() {}, stop() {}, disconnect() {} } }
-    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {}, disconnect() {} } }
-  }
-  window.AudioContext = SilentAudio
-  const context = vm.createContext({ window, document, ref: value => ({ value }), useHead() {},
-    onMounted: fn => { mounted = fn }, onBeforeUnmount: fn => { unmount = fn },
-    broadcastStop: () => window.dispatchEvent(new Event('student-broadcast-stop')),
-    setTimeout: (fn, ms) => { const id = ++timerId; timers.set(id, { fn, ms }); return id }, clearTimeout: id => timers.delete(id),
-    $fetch: async (url, options) => {
-      const body = options?.body
-      calls.push(body?.action || 'overview')
-      if (!body) return { role }
-      if (body.action === 'status') return { id: 'device', label: 'Test phone', status: 'approved' }
-      if (body.action === 'start') return { lease: 'test-lease', expires: new Date(Date.now() + 900000).toISOString() }
-      if (body.action === 'poll') return await new Promise(resolve => { pending = resolve })
-      return {}
+function harness() {
+  const timers = new Map(), audio = [], pending = []
+  let state, visible = true, id = 0
+  const receiver = createBroadcastReceiver({
+    request: body => new Promise((resolve, reject) => pending.push({ body, resolve, reject })),
+    update: next => { state = next },
+    visible: () => visible,
+    setTimer: (fn, ms) => { timers.set(++id, { fn, ms }); return id },
+    clearTimer: key => timers.delete(key),
+    createAudio: () => {
+      const item = { closed: false, beeps: 0, async resume() {}, running: () => true, close() { this.closed = true }, beep() { this.beeps++ } }
+      audio.push(item); return item
     }
   })
-  vm.runInContext(`${source}\nglobalThis.ui = { start, stop, listening, message, busy };`, context)
-  return { ui: context.ui, mount: () => mounted(), unmount: () => unmount(), window, document, timers, audio, calls,
-    respond: async message => { pending({ message }); await new Promise(resolve => setImmediate(resolve)) } }
+  const response = async (messages = [], now = '2026-09-23T01:00:00Z') => {
+    pending.shift().resolve({ student: { id: 'a', real_name: 'Test' }, messages, serverTime: now })
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  return { receiver, timers, audio, pending, response, state: () => state,
+    hide: () => { visible = false; receiver.pause() },
+    tick: () => { const [key, entry] = [...timers][0]; timers.delete(key); entry.fn() }
+  }
 }
-test('mount and parent access never initialize audio', async () => {
-  for (const role of ['parent', 'student']) {
-    const h = harness(role); await h.mount()
-    assert.equal(h.audio.length, 0)
-    assert.equal(h.ui.listening.value, false)
-    if (role === 'parent') assert.deepEqual(h.calls, ['overview'])
-    h.unmount()
-  }
-})
-test('stopping while a poll is in flight discards its late audio and text', async () => {
-  const h = harness(); await h.mount(); await h.ui.start()
-  h.ui.stop()
-  await h.respond({ id: 'late', text: 'Must not play' })
-  assert.equal(h.audio[0].state, 'closed')
+test('automatic reception is silent until gesture; backlog stays silent and live messages beep once', async () => {
+  const h = harness()
+  h.receiver.resume()
+  const old = { id: 'old', text: 'offline', created_at: '2026-09-22T12:00:00Z' }
+  await h.response([old])
+  assert.equal(h.audio.length, 0)
+  assert.equal(h.state().messages[0].id, 'old')
+  await h.receiver.enableSound()
   assert.equal(h.audio[0].beeps, 0)
-  assert.equal(h.ui.message.value, '')
-  assert.equal(h.timers.size, 0)
-  h.unmount()
+  h.tick()
+  const live = { id: 'live', text: 'new', created_at: '2026-09-23T01:00:01Z' }
+  await h.response([old, live], '2026-09-23T01:00:02Z')
+  assert.equal(h.audio[0].beeps, 1)
+  h.tick(); await h.response([old, live], '2026-09-23T01:00:07Z')
+  assert.equal(h.audio[0].beeps, 1)
+  h.receiver.reset()
 })
-test('one short alert per message; background, offline, identity signal and unmount stop', async () => {
-  for (const reason of ['hidden', 'offline', 'identity', 'pagehide', 'unmount', 'watchdog', 'expiry']) {
-    const h = harness(); await h.mount(); await h.ui.start()
-    await h.respond({ id: 'one', text: 'Test notification' })
-    assert.equal(h.audio[0].beeps, 1)
-    const poll = [...h.timers.values()].find(t => t.ms === 1000)
-    poll.fn()
-    await h.respond({ id: 'one', text: 'Test notification' })
-    assert.equal(h.audio[0].beeps, 1)
-    if (reason === 'hidden') { h.document.hidden = true; h.document.dispatchEvent(new Event('visibilitychange')) }
-    if (reason === 'offline' || reason === 'pagehide') h.window.dispatchEvent(new Event(reason))
-    if (reason === 'identity') h.window.dispatchEvent(new Event('student-broadcast-stop'))
-    if (reason === 'unmount') h.unmount()
-    if (reason === 'watchdog') [...h.timers.values()].find(t => t.ms === 5000).fn()
-    if (reason === 'expiry') [...h.timers.values()].find(t => t.ms > 800000).fn()
-    assert.equal(h.ui.listening.value, false, reason)
-    assert.equal(h.audio[0].state, 'closed', reason)
-    assert.equal(h.ui.message.value, '', reason)
-    if (reason !== 'unmount') h.unmount()
-  }
+test('parent switch or unmount discards in-flight messages and audio', async () => {
+  const h = harness(); h.receiver.resume(); await h.response()
+  await h.receiver.enableSound()
+  h.tick(); h.receiver.reset()
+  await h.response([{ id: 'late', text: 'must not appear', created_at: '2026-09-23T01:00:01Z' }])
+  assert.equal(h.state().student, null)
+  assert.deepEqual(h.state().messages, [])
+  assert.equal(h.audio[0].closed, true)
+  assert.equal(h.audio[0].beeps, 0)
+  assert.equal(h.timers.size, 0)
+})
+test('background cancels audio; 401 stops polling; transient failures retry silently', async () => {
+  const h = harness(); h.receiver.resume(); await h.response(); await h.receiver.enableSound()
+  h.hide()
+  assert.equal(h.audio[0].closed, true)
+  assert.equal(h.timers.size, 0)
+  const retry = harness(); retry.receiver.resume()
+  retry.pending.shift().reject({ statusCode: 503 })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(retry.timers.size, 1)
+  retry.tick(); await retry.response([{ id: 'backlog', created_at: '2026-09-23T00:59:00Z' }])
+  assert.equal(retry.audio.length, 0)
+  retry.tick(); retry.pending.shift().reject({ statusCode: 403 })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(retry.state().student, null)
+  assert.equal(retry.timers.size, 0)
+})
+test('acknowledgement updates only after success and stale acknowledgements cannot change a new identity', async () => {
+  const h = harness(); h.receiver.resume(); await h.response([{ id: 'a' }])
+  const ack = h.receiver.acknowledge('a')
+  assert.equal(h.state().messages.length, 1)
+  h.pending.shift().resolve({ acknowledged: true }); await ack
+  assert.equal(h.state().messages.length, 0)
+  h.receiver.reset()
+  h.receiver.resume(); await h.response([{ id: 'new-student-message' }])
+  const stale = h.receiver.acknowledge('new-student-message')
+  const staleRequest = h.pending.shift()
+  h.receiver.reset(); h.receiver.resume(); await h.response([{ id: 'other-student-message' }])
+  staleRequest.resolve({ acknowledged: true }); await stale
+  assert.equal(h.state().messages[0].id, 'other-student-message')
+  h.receiver.reset()
 })
