@@ -37,6 +37,8 @@ test('media API enforces verified conversation role and teacher-only edits', asy
   assert.equal((await get({ studentId: 'child-a', chatType: '家長' })).status, 403)
   assert.equal((await post({ action: 'edit', id: 'a0000000-0000-4000-8000-000000000000', caption: 'changed' })).status, 403)
   assert.equal((await post({ action: 'delete', id: 'a0000000-0000-4000-8000-000000000000' })).status, 403)
+  assert.equal((await post({ action: 'mark-read', studentId: 'child-a', chatType: '學生' })).status, 403)
+  assert.equal((await get({ mode: 'unread-counts' })).status, 403)
   assert.equal((await post({ action: 'prepare-replacement', id: 'a0000000-0000-4000-8000-000000000000', type: 'image/png', size: 12 })).status, 403)
   assert.equal((await post({ action: 'prepare', studentId: 'child-a', chatType: '家長', type: 'image/png', size: 12 })).status, 403)
   assert.equal((await post({ action: 'prepare', studentId: 'child-a', chatType: '學生', type: 'image/svg+xml', size: 12 })).status, 400)

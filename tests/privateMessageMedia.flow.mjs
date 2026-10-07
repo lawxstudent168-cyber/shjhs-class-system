@@ -43,10 +43,12 @@ test('media upload, private listing, teacher edit, replacement and deletion', as
     }
     if (url.pathname !== '/rest/v1/private_message_media') return json({ message: 'unknown table' }, 404)
     let selected = rows.filter(row => [...url.searchParams].every(([key, filter]) => {
-      if (['select', 'order', 'limit'].includes(key)) return true
+      if (['select', 'order', 'limit', 'offset'].includes(key)) return true
       const [op, ...parts] = filter.split('.')
       const value = parts.join('.')
-      return op === 'eq' && String(row[key]) === value
+      if (op === 'eq') return String(row[key]) === value
+      if (op === 'is' && value === 'null') return row[key] == null
+      return false
     }))
     if (req.method === 'POST') {
       const row = { created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...body }
@@ -54,7 +56,10 @@ test('media upload, private listing, teacher edit, replacement and deletion', as
     }
     if (req.method === 'PATCH') selected.forEach(row => Object.assign(row, body))
     if (req.method === 'DELETE') for (const row of selected) rows.splice(rows.indexOf(row), 1)
-    if (req.method === 'GET' && url.searchParams.has('limit')) selected = selected.slice(0, Number(url.searchParams.get('limit')))
+    if (req.method === 'GET' && url.searchParams.has('limit')) {
+      const offset = Number(url.searchParams.get('offset') || 0)
+      selected = selected.slice(offset, offset + Number(url.searchParams.get('limit')))
+    }
     if (req.headers.accept?.includes('application/vnd.pgrst.object+json')) return selected.length ? json(selected[0]) : json({ code: 'PGRST116' }, 406)
     return json(selected)
   })
@@ -100,6 +105,10 @@ test('media upload, private listing, teacher edit, replacement and deletion', as
   response = await fetch(`${origin}/api/teacher-session`, { method: 'POST', headers: { origin, 'content-type': 'application/json' },
     body: JSON.stringify({ action: 'login', password: dynamicTeacherPassword() }) })
   cookie = response.headers.getSetCookie().find(value => value.startsWith('teacher_session=')).split(';')[0]
+  const unread = () => fetch(`${origin}/api/personal-home/media?mode=unread-counts`, { headers: { cookie } })
+  assert.equal((await (await unread()).json()).counts['child-a_學生'], 1)
+  assert.equal((await post({ action: 'mark-read', studentId: 'child-a', chatType: '學生' })).status, 200)
+  assert.equal((await (await unread()).json()).counts['child-a_學生'], undefined)
   response = await post({ action: 'edit', id, caption: '已由導師整理' })
   assert.equal(response.status, 200, await response.clone().text())
   response = await post({ action: 'prepare-replacement', id, type: 'image/png', size: 4 })

@@ -97,5 +97,13 @@ export default defineEventHandler(async event => {
     const { error: storageError } = await storage.remove([row.object_path])
     return { deleted: true, storageCleanupPending: !!storageError }
   }
+  if (body.action === 'mark-read') {
+    if (identity.role !== 'teacher') fail(403, 'Teacher access required')
+    const { studentId, chatType } = authorizeMedia(identity, body.studentId, body.chatType, true)
+    const { error } = await db.from(MEDIA_TABLE).update({ read_at: new Date().toISOString() })
+      .eq('student_id', studentId).eq('chat_type', chatType).is('read_at', null)
+    if (error) fail(503, 'Unable to mark media as read')
+    return { read: true }
+  }
   fail(400, 'Unknown action')
 })

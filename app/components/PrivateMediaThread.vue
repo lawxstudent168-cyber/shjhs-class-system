@@ -1,11 +1,12 @@
 <template>
   <section v-if="studentId && chatType" class="media-thread" aria-label="私訊圖片與影片">
-    <header><h4>圖片與影片</h4><button type="button" :disabled="busy" @click="load">更新</button></header>
+    <header><h4>圖片與影片</h4><button type="button" :disabled="busy" @click="load()">更新</button></header>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="loginRequired" class="hint">上傳及查看附件前，請先到 <NuxtLink :to="`/personal?verify=${chatType === '學生' ? 'student' : 'parent'}`">個人首頁驗證身分</NuxtLink>，再返回私訊。</p>
     <template v-else>
       <p v-if="loading" class="hint">正在載入附件…</p>
       <p v-else-if="!items.length" class="hint">此對話尚無圖片或影片。</p>
+      <button v-if="items.length && hasMore" type="button" :disabled="loading" @click="load(true)">載入較早附件</button>
       <ol v-else class="media-list">
         <li v-for="item in items" :key="item.id">
           <div class="meta">{{ item.senderRole }} · {{ formatTime(item.createdAt) }}</div>
@@ -34,9 +35,10 @@
 import { ref, watch, onMounted } from 'vue'
 
 const props = defineProps({ studentId: { type: [String, Number], default: '' }, chatType: { type: String, default: '' }, teacher: Boolean })
+const emit = defineEmits(['media-read'])
 const supabase = useSupabaseClient()
 const items = ref([]), drafts = ref({}), error = ref(''), loading = ref(false), busy = ref(false)
-const loginRequired = ref(false), file = ref(null), caption = ref(''), fileInput = ref(null)
+const loginRequired = ref(false), file = ref(null), caption = ref(''), fileInput = ref(null), hasMore = ref(false)
 let loadEpoch = 0
 const api = body => $fetch('/api/personal-home/media', { method: 'POST', body, retry: 0, timeout: 15000 })
 const formatTime = value => new Date(value).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false })
@@ -47,17 +49,23 @@ function mediaError(err) {
   if (status(err) === 429) return '上傳次數過多，請稍後再試。'
   return '附件操作失敗，請檢查檔案、連線或儲存設定後重試。'
 }
-async function load() {
+async function load(more = false) {
   if (!props.studentId || !props.chatType) return
   const current = ++loadEpoch
   const studentId = String(props.studentId), chatType = props.chatType
+  const offset = more ? items.value.length : 0
   loading.value = true; error.value = ''
   try {
-    const result = await $fetch('/api/personal-home/media', { query: { studentId, chatType }, retry: 0 })
+    const result = await $fetch('/api/personal-home/media', { query: { studentId, chatType, offset }, retry: 0 })
     if (current !== loadEpoch) return
-    items.value = result.media
-    drafts.value = Object.fromEntries(result.media.map(item => [item.id, item.caption]))
+    items.value = more ? [...result.media, ...items.value] : result.media
+    hasMore.value = result.hasMore
+    drafts.value = Object.fromEntries(items.value.map(item => [item.id, item.caption]))
     loginRequired.value = false
+    if (props.teacher && !more) {
+      try { await api({ action: 'mark-read', studentId, chatType }); emit('media-read') }
+      catch { error.value = '附件已載入，但未讀狀態尚未更新。' }
+    }
   } catch (err) {
     if (current !== loadEpoch) return
     items.value = []
@@ -108,8 +116,8 @@ async function remove(item) {
   catch (err) { error.value = mediaError(err) }
   finally { busy.value = false }
 }
-watch(() => [props.studentId, props.chatType], () => { loadEpoch++; items.value = []; void load() })
-onMounted(load)
+watch(() => [props.studentId, props.chatType], () => { loadEpoch++; items.value = []; hasMore.value = false; void load() })
+onMounted(() => load())
 </script>
 
 <style scoped>

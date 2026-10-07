@@ -9,10 +9,12 @@ create table public.private_message_media (
   mime_type text not null,
   size_bytes bigint not null check (size_bytes between 1 and 52428800),
   caption text not null default '' check (char_length(caption) <= 200),
+  read_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 create index private_message_media_thread on public.private_message_media (student_id, chat_type, created_at desc);
+create index private_message_media_unread on public.private_message_media (student_id, chat_type) where read_at is null;
 alter table public.private_message_media enable row level security;
 revoke all on public.private_message_media from anon, authenticated;
 grant select, insert, update, delete on public.private_message_media to service_role;
