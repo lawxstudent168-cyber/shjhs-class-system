@@ -7,7 +7,7 @@
       <p v-if="loading" class="hint">正在載入附件…</p>
       <p v-else-if="!items.length" class="hint">此對話尚無圖片或影片。</p>
       <button v-if="items.length && hasMore" type="button" :disabled="loading" @click="load(true)">載入較早附件</button>
-      <ol v-else class="media-list">
+      <ol v-if="items.length" class="media-list">
         <li v-for="item in items" :key="item.id">
           <div class="meta">{{ item.senderRole }} · {{ formatTime(item.createdAt) }}</div>
           <img v-if="item.mimeType.startsWith('image/')" :src="item.url" alt="私訊圖片" loading="lazy" />
@@ -21,11 +21,12 @@
           </div>
         </li>
       </ol>
-      <form v-if="!teacher" @submit.prevent="send" class="upload-form">
+      <form @submit.prevent="send" class="upload-form">
+        <strong>{{ teacher ? `傳送給這位${chatType === '家長' ? '家長' : '學生'}` : '傳送圖片或影片給導師' }}</strong>
         <label>選擇圖片或影片<input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" required :disabled="busy" @change="choose" /></label>
-        <input v-model="caption" maxlength="200" placeholder="附註（選填，上傳後不可修改）" :disabled="busy" />
-        <button type="submit" :disabled="busy || !file">{{ busy ? '上傳中…' : '上傳附件' }}</button>
-        <p class="hint">圖片最多 20 MB，影片最多 50 MB。上傳後只有導師可以修改或刪除。</p>
+        <input v-model="caption" maxlength="200" :placeholder="teacher ? '附註（選填，可稍後修改）' : '附註（選填，上傳後不可修改）'" :disabled="busy" />
+        <button type="submit" :disabled="busy || !file">{{ busy ? '上傳中…' : '傳送附件' }}</button>
+        <p class="hint">圖片最多 20 MB，影片最多 50 MB。{{ teacher ? '只有這個對話頻道的對象能查看。' : '上傳後只有導師可以修改或刪除。' }}</p>
       </form>
     </template>
   </section>

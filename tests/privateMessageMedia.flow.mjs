@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { startPersonalFixture } from './fixtures/personalSupabase.mjs'
 import { dynamicTeacherPassword } from '../server/utils/teacherSession.js'
 
-test('media upload, private listing, teacher edit, replacement and deletion', async t => {
+test('student and teacher uploads stay in their private channel, with teacher editing and deletion', async t => {
   const personal = await startPersonalFixture()
   const rows = [], objects = new Map()
   const media = createServer(async (req, res) => {
@@ -86,7 +86,7 @@ test('media upload, private listing, teacher edit, replacement and deletion', as
   let cookie = ''
   const post = body => fetch(`${origin}/api/personal-home/media`, { method: 'POST', headers: {
     cookie, origin, 'content-type': 'application/json' }, body: JSON.stringify(body) })
-  const list = () => fetch(`${origin}/api/personal-home/media?studentId=child-a&chatType=學生`, { headers: { cookie } })
+  const list = (chatType = '學生') => fetch(`${origin}/api/personal-home/media?studentId=child-a&chatType=${encodeURIComponent(chatType)}`, { headers: { cookie } })
   let response = await fetch(`${origin}/api/personal-home/session`, { method: 'POST', headers: { origin, 'content-type': 'application/json' },
     body: JSON.stringify({ role: 'student', seatNumber: '1', birthday: '20130514', idLast5: '12345' }) })
   assert.equal(response.status, 200)
@@ -105,10 +105,33 @@ test('media upload, private listing, teacher edit, replacement and deletion', as
   response = await fetch(`${origin}/api/teacher-session`, { method: 'POST', headers: { origin, 'content-type': 'application/json' },
     body: JSON.stringify({ action: 'login', password: dynamicTeacherPassword() }) })
   cookie = response.headers.getSetCookie().find(value => value.startsWith('teacher_session=')).split(';')[0]
+  const teacherCookie = cookie
   const unread = () => fetch(`${origin}/api/personal-home/media?mode=unread-counts`, { headers: { cookie } })
   assert.equal((await (await unread()).json()).counts['child-a_學生'], 1)
   assert.equal((await post({ action: 'mark-read', studentId: 'child-a', chatType: '學生' })).status, 200)
   assert.equal((await (await unread()).json()).counts['child-a_學生'], undefined)
+  response = await post({ action: 'prepare', studentId: 'child-a', chatType: '家長', type: 'image/png', size: 4, caption: '給家長的照片' })
+  assert.equal(response.status, 200, await response.clone().text())
+  const teacherUpload = await response.json()
+  assert.equal((await client.storage.from(teacherUpload.bucket).uploadToSignedUrl(teacherUpload.path, teacherUpload.token,
+    new Blob(['ijkl'], { type: 'image/png' }))).error, null)
+  response = await post({ action: 'complete', ticket: teacherUpload.ticket })
+  assert.equal(response.status, 200, await response.clone().text())
+  const teacherMedia = (await response.json()).media
+  assert.equal(teacherMedia.senderRole, '導師')
+  assert.ok(rows.find(row => row.id === teacherMedia.id).read_at)
+  assert.equal((await (await unread()).json()).counts['child-a_家長'], undefined)
+  response = await fetch(`${origin}/api/personal-home/session`, { method: 'POST', headers: { origin, 'content-type': 'application/json' },
+    body: JSON.stringify({ role: 'parent', seatNumber: '1', birthday: '20130514', idLast5: '12345', email: 'parent@example.test' }) })
+  assert.equal(response.status, 200, await response.clone().text())
+  cookie = response.headers.getSetCookie().find(value => value.startsWith('personal_home_session=')).split(';')[0]
+  response = await list('家長')
+  assert.equal(response.status, 200, await response.clone().text())
+  assert.deepEqual((await response.json()).media.map(item => item.id), [teacherMedia.id])
+  assert.equal((await list('學生')).status, 403)
+  assert.equal((await post({ action: 'delete', id: teacherMedia.id })).status, 403)
+  cookie = teacherCookie
+  assert.equal((await post({ action: 'delete', id: teacherMedia.id })).status, 200)
   response = await post({ action: 'edit', id, caption: '已由導師整理' })
   assert.equal(response.status, 200, await response.clone().text())
   response = await post({ action: 'prepare-replacement', id, type: 'image/png', size: 4 })

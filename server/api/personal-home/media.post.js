@@ -34,7 +34,6 @@ export default defineEventHandler(async event => {
   if (body.action === 'prepare' || body.action === 'prepare-replacement') {
     const replacing = body.action === 'prepare-replacement'
     if (replacing && identity.role !== 'teacher') fail(403, 'Teacher access required')
-    if (!replacing && identity.role === 'teacher') fail(403, 'Teacher upload is not available here')
     let target
     if (replacing) target = await getMedia(db, body.id)
     const studentId = replacing ? target.student_id : body.studentId
@@ -76,8 +75,9 @@ export default defineEventHandler(async event => {
       return { media: mediaRow(existing, '') }
     }
     const { data, error } = await db.from(MEDIA_TABLE).insert({ id: ticket.id, student_id: ticket.studentId,
-      chat_type: ticket.chatType, sender_role: ticket.chatType, object_path: ticket.path, mime_type: ticket.type,
-      size_bytes: ticket.size, caption: ticket.caption }).select().single()
+      chat_type: ticket.chatType, sender_role: identity.role === 'teacher' ? '導師' : ticket.chatType,
+      object_path: ticket.path, mime_type: ticket.type, size_bytes: ticket.size, caption: ticket.caption,
+      read_at: identity.role === 'teacher' ? new Date().toISOString() : null }).select().single()
     if (error || !data) fail(503, 'Unable to save media')
     return { media: mediaRow(data, '') }
   }
