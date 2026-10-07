@@ -107,6 +107,7 @@
 
           </div>
         </div>
+        <PrivateMediaThread :student-id="mediaStudentId" :chat-type="mediaChatType" teacher />
       </div>
       
       <!-- 💡 修正：將單行 input 改為支援多行換行的 textarea，並移除 @keyup.enter 綁定 -->
@@ -191,6 +192,8 @@ const supabase = useSupabaseClient()
 const students = ref([])
 const allMessages = ref([])
 const activeChatThread = ref('')
+const mediaStudentId = computed(() => activeChatThread.value ? activeChatThread.value.split('_')[0] : '')
+const mediaChatType = computed(() => activeChatThread.value ? activeChatThread.value.split('_')[1] : '')
 const replyContent = ref('')
 const isSending = ref(false)
 

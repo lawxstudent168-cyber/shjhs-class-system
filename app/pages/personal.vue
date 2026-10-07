@@ -60,12 +60,12 @@
 
         <nav class="quick-links" aria-label="常用功能">
           <NuxtLink v-if="dashboard.role === 'student'" to="/student-broadcast">學生手機廣播 ↗</NuxtLink>
-          <NuxtLink :to="dashboard.role === 'parent' ? '/parent-message' : '/student-message'">私訊導師 ↗</NuxtLink>
+          <NuxtLink :to="dashboard.role === 'parent' ? { path: '/parent-message', query: { studentId: selectedStudent } } : '/student-message'">私訊導師 ↗</NuxtLink>
           <NuxtLink v-if="dashboard.role === 'parent'" to="/leave-application">填寫請假通知 ↗</NuxtLink>
           <NuxtLink to="/">班級公共看板 ↗</NuxtLink>
         </nav>
         <p v-if="broadcastBindingError" role="status">{{ broadcastBindingError }}</p>
-        <p class="muted small">私訊與請假頁保留原有驗證程序。個人首頁只提供查閱，不會將訊息標為已讀。</p>
+        <p class="muted small">從此處進入私訊可沿用已驗證身分；圖片與影片使用獨立的私有儲存空間。請假頁仍保留原有驗證程序。</p>
 
         <div class="columns">
           <div>
