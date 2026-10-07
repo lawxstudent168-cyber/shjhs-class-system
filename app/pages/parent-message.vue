@@ -75,6 +75,9 @@
       <div v-else class="chat-section">
         <div class="chat-header">
           <h3>💬 與導師的私訊 ({{ verifiedStudentName }})</h3>
+          <select v-if="verifiedChildren.length > 1" v-model="selectedStudentId" aria-label="切換孩子" @change="switchVerifiedChild">
+            <option v-for="child in verifiedChildren" :key="child.id" :value="child.id">{{ child.seatNumber }}號 {{ child.name }}</option>
+          </select>
           <button @click="logout" class="logout-btn">登出</button>
         </div>
         <div class="chat-history" id="chatContainer">
@@ -86,6 +89,7 @@
             </div>
             <div class="msg-content">{{ msg.content }}</div>
           </div>
+          <PrivateMediaThread :student-id="selectedStudentId" chat-type="家長" />
         </div>
         <form @submit.prevent="sendMessage" class="reply-form">
           <textarea v-model="newMessage" rows="2" placeholder="請輸入訊息..." required :disabled="isSending"></textarea>
@@ -99,9 +103,11 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 const supabase = useSupabaseClient()
+const route = useRoute()
 
 const students = ref([])
 const selectedStudentId = ref('')
+const verifiedChildren = ref([])
 const authMethod = ref('id') 
 
 const studentBirthday = ref('')
@@ -315,8 +321,18 @@ const sendMessage = async () => {
   }
 }
 
-const logout = () => { 
+const switchVerifiedChild = async () => {
+  const child = verifiedChildren.value.find(item => item.id === selectedStudentId.value)
+  if (!child) return
+  verifiedStudentName.value = child.name
+  await loadChatHistory()
+}
+
+const logout = async () => {
+  try { await $fetch('/api/personal-home/logout', { method: 'POST', body: {}, retry: 0 }) }
+  catch { alert('登出尚未完成，請恢復連線後重試。'); return }
   isVerified.value = false
+  verifiedChildren.value = []
   studentBirthday.value = ''
   studentIdLast4.value = ''
   emailPrefix.value = ''
@@ -328,7 +344,19 @@ const scrollToBottom = () => { nextTick(() => { const c = document.getElementByI
 
 onMounted(async () => {
   await checkSchoolNetwork() 
-  fetchStudents()
+  await fetchStudents()
+  try {
+    const identity = await $fetch('/api/personal-home/media', { query: { mode: 'identity' }, retry: 0 })
+    if (identity.role === 'parent' && identity.students.length) {
+      verifiedChildren.value = identity.students
+      const requested = String(route.query.studentId || '')
+      const child = identity.students.find(item => item.id === requested) || identity.students[0]
+      selectedStudentId.value = child.id
+      verifiedStudentName.value = child.name
+      isVerified.value = true
+      await loadChatHistory()
+    }
+  } catch {}
 })
 </script>
 

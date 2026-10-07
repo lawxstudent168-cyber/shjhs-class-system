@@ -41,6 +41,7 @@
             <div class="msg-info"><span class="sender">{{ msg.sender_role === '學生' ? '我' : '👨‍🏫 導師' }}</span><span class="time">{{ formatTime(msg.created_at) }}</span></div>
             <div class="msg-content">{{ msg.content }}</div>
           </div>
+          <PrivateMediaThread :student-id="selectedStudentId" chat-type="學生" />
         </div>
         <form @submit.prevent="sendMessage" class="reply-form">
           <textarea v-model="newMessage" rows="2" placeholder="請輸入訊息..." required :disabled="isSending"></textarea>
@@ -115,13 +116,26 @@ const sendMessage = async () => {
   } catch (error) { alert('傳送失敗') } finally { isSending.value = false }
 }
 
-const logout = () => { isVerified.value = false; studentBirthday.value = ''; studentIdLast5.value = ''; chatMessages.value = [] }
+const logout = async () => {
+  try { await $fetch('/api/personal-home/logout', { method: 'POST', body: {}, retry: 0 }) }
+  catch { alert('登出尚未完成，請恢復連線後重試。'); return }
+  isVerified.value = false; studentBirthday.value = ''; studentIdLast5.value = ''; chatMessages.value = []
+}
 const formatTime = (isoString) => new Date(isoString).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 const scrollToBottom = () => { nextTick(() => { const c = document.getElementById('chatContainer'); if (c) c.scrollTop = c.scrollHeight }) }
 
 onMounted(async () => {
   await checkSchoolNetwork() 
-  fetchStudents()
+  await fetchStudents()
+  try {
+    const identity = await $fetch('/api/personal-home/media', { query: { mode: 'identity' }, retry: 0 })
+    if (identity.role === 'student' && identity.students.length === 1) {
+      selectedStudentId.value = identity.students[0].id
+      verifiedStudentName.value = identity.students[0].name
+      isVerified.value = true
+      await loadChatHistory()
+    }
+  } catch {}
 })
 </script>
 

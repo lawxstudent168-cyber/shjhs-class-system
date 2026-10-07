@@ -107,6 +107,7 @@
 
           </div>
         </div>
+        <PrivateMediaThread :student-id="mediaStudentId" :chat-type="mediaChatType" teacher @media-read="loadMediaCounts" />
       </div>
       
       <!-- 💡 修正：將單行 input 改為支援多行換行的 textarea，並移除 @keyup.enter 綁定 -->
@@ -191,6 +192,15 @@ const supabase = useSupabaseClient()
 const students = ref([])
 const allMessages = ref([])
 const activeChatThread = ref('')
+const mediaStudentId = computed(() => activeChatThread.value ? activeChatThread.value.split('_')[0] : '')
+const mediaChatType = computed(() => activeChatThread.value ? activeChatThread.value.split('_')[1] : '')
+const mediaUnreadCounts = ref({})
+const loadMediaCounts = async () => {
+  try {
+    const result = await $fetch('/api/personal-home/media', { query: { mode: 'unread-counts' }, retry: 0 })
+    mediaUnreadCounts.value = result.counts
+  } catch { mediaUnreadCounts.value = {} }
+}
 const replyContent = ref('')
 const isSending = ref(false)
 
@@ -284,6 +294,7 @@ const fetchRecipients = async () => {
 onMounted(async () => {
   await fetchData()
   await fetchRecipients()
+  await loadMediaCounts()
 })
 
 watch(activeChatThread, (newVal) => {
@@ -305,9 +316,10 @@ const filteredMessages = computed(() => {
 
 const getMsgBadge = (studentId, type) => {
   const msgs = allMessages.value.filter(m => m.student_id === studentId && m.chat_type === type)
-  if (msgs.length === 0) return ''
   const unreadMsgs = msgs.filter(m => m.sender_role !== '導師' && m.is_read_by_teacher === false)
-  if (unreadMsgs.length > 0) return `🔴 (未讀 ${unreadMsgs.length} 則)`
+  const unreadMedia = mediaUnreadCounts.value[`${studentId}_${type}`] || 0
+  if (unreadMsgs.length + unreadMedia > 0) return `🔴 (未讀 ${unreadMsgs.length + unreadMedia} 則)`
+  if (msgs.length === 0) return ''
   return `(共 ${msgs.length} 則)`
 }
 
