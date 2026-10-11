@@ -66,6 +66,24 @@
           <p class="setting-desc">拖曳後可在下方看板預覽，按「儲存所有設定」才會更新首頁。</p>
         </div>
 
+        <div class="left-text-settings">
+          <h3>🎨 看板左側表格文字</h3>
+          <p class="setting-desc">欄位名稱、節次、科目與時間可分別調整字級和顏色；按「恢復主題色」可回到主題預設。</p>
+          <div class="left-text-grid">
+            <div v-for="(setting, key) in examLeftTextSettings" :key="key" class="left-text-control">
+              <label :for="`left-size-${key}`">{{ setting.label }}：{{ examData.leftTextSizes[key] }} px</label>
+              <input :id="`left-size-${key}`" v-model.number="examData.leftTextSizes[key]"
+                type="range" :min="setting.min" :max="setting.max" step="1" />
+              <div class="color-control">
+                <label :for="`left-color-${key}`">文字顏色</label>
+                <input :id="`left-color-${key}`" type="color" :value="leftTextColor(key)"
+                  @input="examData.leftTextColors[key] = $event.target.value" />
+                <button type="button" class="btn-outline" @click="examData.leftTextColors[key] = null">恢復主題色</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="theme-selector-box">
           <label class="main-label">🎨 選擇大考看板主題風格：</label>
           <div class="theme-grid">
@@ -187,10 +205,10 @@
                   </thead>
                   <tbody>
                     <tr v-for="(p, i) in previewStatus.periods" :key="i" :class="{ 'active-row': p.isActive }">
-                      <td>第 {{ i + 1 }} 節</td>
-                      <td class="font-bold">{{ p.subject }}</td>
-                      <td class="font-mono">{{ p.startTime }}</td>
-                      <td class="font-mono">{{ p.endTime }}</td>
+                      <td class="exam-cell-period">第 {{ i + 1 }} 節</td>
+                      <td class="exam-cell-subject font-bold">{{ p.subject }}</td>
+                      <td class="exam-cell-time font-mono">{{ p.startTime }}</td>
+                      <td class="exam-cell-time font-mono">{{ p.endTime }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -247,7 +265,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { examFontSettings, examFontStyles, normalizeExamSchedule } from '../utils/examSchedule.js'
+import { examFontSettings, examFontStyles, examLeftTextSettings, examLeftTextStyles, normalizeExamSchedule } from '../utils/examSchedule.js'
 const supabase = useSupabaseClient()
 
 const isLoggedIn = ref(false)
@@ -292,6 +310,9 @@ const defaultExamData = {
 
 const examData = ref(normalizeExamSchedule(defaultExamData))
 const editedDay = computed(() => examData.value.days[editingDay.value - 1])
+const leftTextColor = key => examData.value.leftTextColors[key] ||
+  (key === 'header' ? (examThemes[examData.value.theme] || examThemes.midnight).title :
+    (examThemes[examData.value.theme] || examThemes.midnight).text)
 
 const currentThemeStyles = computed(() => {
   const t = examThemes[examData.value.theme] || examThemes.midnight
@@ -305,7 +326,8 @@ const currentThemeStyles = computed(() => {
     '--ex-success': t.success,
     '--ex-danger': t.danger,
     '--ex-panel-bg': t.panelBg,
-    ...examFontStyles(examData.value)
+    ...examFontStyles(examData.value),
+    ...examLeftTextStyles(examData.value, t)
   }
 })
 
@@ -568,6 +590,14 @@ const saveExamData = async () => {
 .font-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 24px; }
 .font-setting { display: flex; flex-direction: column; gap: 8px; color: #334155; font-weight: bold; }
 .font-setting input { width: 100%; cursor: pointer; }
+.left-text-settings { border-top: 1px dashed #cbd5e1; margin-top: 20px; padding-top: 20px; }
+.left-text-settings h3 { margin: 0 0 8px; color: #334155; }
+.left-text-settings .setting-desc { margin-left: 0; }
+.left-text-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 15px; }
+.left-text-control { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #334155; font-weight: bold; }
+.left-text-control input[type="range"] { width: 100%; cursor: pointer; }
+.color-control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.9rem; }
+.color-control input[type="color"] { width: 42px; height: 34px; border: 1px solid #cbd5e1; border-radius: 5px; background: white; cursor: pointer; }
 
 .theme-selector-box { margin-top: 10px; }
 .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; margin-top: 10px; }
@@ -639,10 +669,16 @@ const saveExamData = async () => {
 .exam-left-panel { flex: 1; max-width: 800px; }
 .exam-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 1.6rem; background: var(--ex-panel-bg); border-radius: 16px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2);}
 .exam-table th, .exam-table td { padding: 22px; text-align: center; border-bottom: 1px solid var(--ex-border); }
-.exam-table th { background: var(--ex-border); color: var(--ex-title); font-weight: normal; font-size: 1.4rem; }
+.exam-table th { background: var(--ex-border); color: var(--ex-left-header-color, var(--ex-title)); font-weight: normal; font-size: var(--ex-left-header-size, 22px); }
 .exam-table tr:last-child td { border-bottom: none; }
 .active-row { background: rgba(255,255,255,0.1); border-left: 5px solid var(--ex-accent);}
-.active-row td { color: var(--ex-accent); font-weight: bold; border-bottom-color: transparent;}
+.active-row td { font-weight: bold; border-bottom-color: transparent;}
+.exam-cell-period { font-size: var(--ex-left-period-size, 29px); color: var(--ex-left-period-color, var(--ex-text)); }
+.exam-cell-subject { font-size: var(--ex-left-subject-size, 29px); color: var(--ex-left-subject-color, var(--ex-text)); }
+.exam-cell-time { font-size: var(--ex-left-time-size, 29px); color: var(--ex-left-time-color, var(--ex-text)); }
+.active-row .exam-cell-period { color: var(--ex-left-period-active-color, var(--ex-accent)); }
+.active-row .exam-cell-subject { color: var(--ex-left-subject-active-color, var(--ex-accent)); }
+.active-row .exam-cell-time { color: var(--ex-left-time-active-color, var(--ex-accent)); }
 .font-mono { font-family: monospace; }
 .font-bold { font-weight: bold; letter-spacing: 1px; }
 

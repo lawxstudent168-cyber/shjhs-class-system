@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { displayedExamSchedule, examFontStyles, normalizeExamSchedule } from '../app/utils/examSchedule.js'
+import { displayedExamSchedule, examFontStyles, examLeftTextStyles, normalizeExamSchedule } from '../app/utils/examSchedule.js'
 
 test('existing one-day exam data remains on day one after migration', () => {
   const saved = { title: '原考程', periods: [{ subject: '國文', startTime: '08:00', endTime: '09:00' }], notes: ['帶文具'], theme: 'ocean' }
@@ -38,4 +38,22 @@ test('font sizes are saved as bounded numbers and applied to the board', () => {
     '--ex-next-time-size': '23px'
   })
   assert.equal(normalizeExamSchedule({ fontSizes: { clock: 999 } }).fontSizes.clock, 120)
+})
+
+test('left table text sizes and colors apply to normal and active rows', () => {
+  const theme = { title: '#ffffff', text: '#cccccc', accent: '#00ff00' }
+  const data = normalizeExamSchedule({
+    leftTextSizes: { header: 30, period: 28, subject: 42, time: 36 },
+    leftTextColors: { header: '#112233', period: '#445566', subject: '#778899', time: '#aabbcc' }
+  })
+  const styles = examLeftTextStyles(data, theme)
+  assert.equal(styles['--ex-left-header-size'], '30px')
+  assert.equal(styles['--ex-left-header-color'], '#112233')
+  assert.equal(styles['--ex-left-subject-size'], '42px')
+  assert.equal(styles['--ex-left-subject-color'], '#778899')
+  assert.equal(styles['--ex-left-subject-active-color'], '#778899')
+  assert.equal(styles['--ex-left-time-active-color'], '#aabbcc')
+  assert.equal(styles['--ex-left-period-color'], '#445566')
+  assert.equal(normalizeExamSchedule({ leftTextSizes: { time: 999 } }).leftTextSizes.time, 29)
+  assert.equal(examLeftTextStyles({ leftTextColors: { subject: 'red' } }, theme)['--ex-left-subject-active-color'], '#00ff00')
 })

@@ -17,10 +17,10 @@
           </thead>
           <tbody>
             <tr v-for="(p, i) in examStatus.periods" :key="i" :class="{ 'active-row': p.isActive }">
-              <td>第 {{ i + 1 }} 節</td>
-              <td class="font-bold">{{ p.subject }}</td>
-              <td class="font-mono">{{ p.startTime }}</td>
-              <td class="font-mono">{{ p.endTime }}</td>
+              <td class="exam-cell-period">第 {{ i + 1 }} 節</td>
+              <td class="exam-cell-subject font-bold">{{ p.subject }}</td>
+              <td class="exam-cell-time font-mono">{{ p.startTime }}</td>
+              <td class="exam-cell-time font-mono">{{ p.endTime }}</td>
             </tr>
           </tbody>
         </table>
@@ -92,10 +92,16 @@ defineEmits(['exit'])
 .exam-left-panel { flex: 1; max-width: 900px; }
 .exam-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 1.8rem; background: var(--ex-panel-bg); border-radius: 16px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2);}
 .exam-table th, .exam-table td { padding: 22px; text-align: center; border-bottom: 1px solid var(--ex-border); }
-.exam-table th { background: var(--ex-border); color: var(--ex-title); font-weight: normal; font-size: 1.4rem; }
+.exam-table th { background: var(--ex-border); color: var(--ex-left-header-color, var(--ex-title)); font-weight: normal; font-size: var(--ex-left-header-size, 22px); }
 .exam-table tr:last-child td { border-bottom: none; }
 .active-row { background: rgba(255,255,255,0.1); border-left: 5px solid var(--ex-accent);}
-.active-row td { color: var(--ex-accent); font-weight: bold; border-bottom-color: transparent;}
+.active-row td { font-weight: bold; border-bottom-color: transparent;}
+.exam-cell-period { font-size: var(--ex-left-period-size, 29px); color: var(--ex-left-period-color, var(--ex-text)); }
+.exam-cell-subject { font-size: var(--ex-left-subject-size, 29px); color: var(--ex-left-subject-color, var(--ex-text)); }
+.exam-cell-time { font-size: var(--ex-left-time-size, 29px); color: var(--ex-left-time-color, var(--ex-text)); }
+.active-row .exam-cell-period { color: var(--ex-left-period-active-color, var(--ex-accent)); }
+.active-row .exam-cell-subject { color: var(--ex-left-subject-active-color, var(--ex-accent)); }
+.active-row .exam-cell-time { color: var(--ex-left-time-active-color, var(--ex-accent)); }
 .font-mono { font-family: monospace; }
 .font-bold { font-weight: bold; letter-spacing: 1px; }
 
@@ -134,6 +140,10 @@ defineEmits(['exit'])
   .exam-main-title { font-size: 2rem; }
   .exam-table { font-size: 1.2rem; }
   .exam-table th, .exam-table td { padding: 12px; }
+  .exam-table th { font-size: min(var(--ex-left-header-size, 22px), 5vw); }
+  .exam-cell-period { font-size: min(var(--ex-left-period-size, 29px), 5vw); }
+  .exam-cell-subject { font-size: min(var(--ex-left-subject-size, 29px), 5vw); }
+  .exam-cell-time { font-size: min(var(--ex-left-time-size, 29px), 5vw); }
   .exam-clock { font-size: min(var(--ex-clock-size, 120px), 15vw); }
   .status-subject { font-size: min(var(--ex-subject-size, 88px), 12vw); }
   .exam-countdown { font-size: min(var(--ex-countdown-size, 104px), 14vw); }
