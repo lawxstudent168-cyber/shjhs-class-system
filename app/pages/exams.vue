@@ -46,13 +46,29 @@
         </div>
 
         <div class="display-day-setting">
-          <label class="main-label" for="display-day">🏠 首頁大考看板要顯示哪一天？</label>
-          <select id="display-day" v-model.number="examData.displayDay" class="form-control day-select">
-            <option :value="1">第一天</option>
-            <option :value="2">第二天</option>
-          </select>
-          <p class="setting-desc">手動指定，儲存後首頁只顯示所選日期的標題、考程和考前提醒；不會依照今天日期自動切換。</p>
-          <p v-if="!examData.days[examData.displayDay - 1].periods.length" class="setting-warning">目前選擇的日期還沒有考試節次，首頁不會顯示大考看板按鈕。</p>
+          <h3>📅 考試日期與首頁切換方式</h3>
+          <div class="exam-date-grid">
+            <label v-for="(day, index) in examData.days" :key="index" class="exam-date-field">
+              <span>第 {{ index + 1 }} 天考試日期</span>
+              <input v-model="day.date" type="date" class="form-control" />
+            </label>
+          </div>
+          <div class="display-mode-options" role="group" aria-label="首頁考程切換方式">
+            <label><input v-model="examData.displayMode" type="radio" value="automatic" /> 到日期自動切換</label>
+            <label><input v-model="examData.displayMode" type="radio" value="manual" /> 自己手動指定</label>
+          </div>
+          <p v-if="examData.displayMode === 'automatic'" class="setting-desc">依台灣日期顯示第一天考程；到第二天考試日的 00:00 自動顯示第二天。若兩天不連續，中間仍顯示第一天；第二天結束後保留第二天，直到您關閉大考模式或更改設定。</p>
+          <p v-else class="setting-desc">手動模式不會依日期換表，請在下方指定首頁顯示哪一天。</p>
+          <div v-if="examData.displayMode === 'manual'" class="manual-day-field">
+            <label class="main-label" for="display-day">首頁顯示</label>
+            <select id="display-day" v-model.number="examData.displayDay" class="form-control day-select">
+              <option :value="1">第一天</option>
+              <option :value="2">第二天</option>
+            </select>
+          </div>
+          <p v-if="examData.displayMode === 'automatic' && !hasValidExamDates(examData)" class="setting-warning">自動模式需要填寫兩個有效日期，且第二天必須晚於第一天，才能儲存。</p>
+          <p v-if="!examData.days[previewHomepageDay - 1].periods.length" class="setting-warning">目前首頁要顯示的日期還沒有考試節次，首頁不會顯示大考看板按鈕。</p>
+          <p v-else class="setting-desc">目前首頁將顯示：第 {{ previewHomepageDay }} 天。</p>
         </div>
 
         <div class="font-settings">
@@ -86,16 +102,16 @@
 
         <div class="theme-selector-box">
           <label class="main-label">🎨 選擇大考看板主題風格：</label>
-          <div class="theme-grid">
-            <div 
-              v-for="(theme, key) in examThemes" 
-              :key="key" 
-              class="theme-item" 
-              :class="{ 'is-selected': examData.theme === key }"
-              :style="{ backgroundColor: theme.bg, borderColor: theme.border }"
-              @click="examData.theme = key"
-            >
-              <div class="theme-name" :style="{ color: theme.title }">{{ theme.name }}</div>
+          <div v-for="group in themeGroups" :key="group.name" class="theme-group">
+            <h4>{{ group.name }}</h4>
+            <div class="theme-grid">
+              <button v-for="(theme, key) in group.themes" :key="key" type="button"
+                class="theme-item" :class="{ 'is-selected': examData.theme === key }"
+                :aria-pressed="examData.theme === key"
+                :style="{ backgroundColor: theme.bg, borderColor: theme.border }"
+                @click="examData.theme = key">
+                <span class="theme-name" :style="{ color: theme.title }">{{ theme.name }}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -264,8 +280,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { examFontSettings, examFontStyles, examLeftTextSettings, examLeftTextStyles, normalizeExamSchedule } from '../utils/examSchedule.js'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { examFontSettings, examFontStyles, examLeftTextSettings, examLeftTextStyles, normalizeExamSchedule, hasValidExamDates, displayedExamSchedule, taiwanDateISO } from '../utils/examSchedule.js'
+import { examThemes, classicExamThemes, festivalExamThemes } from '../utils/examThemes.js'
 const supabase = useSupabaseClient()
 
 const isLoggedIn = ref(false)
@@ -275,26 +292,23 @@ const isSaving = ref(false)
 
 const mockTime = ref('08:30')
 const editingDay = ref(1)
+const previewNow = ref(Date.now())
+let previewTimer
+const themeGroups = [
+  { name: '原有主題', themes: classicExamThemes },
+  { name: '節慶主題（新增 20 種）', themes: festivalExamThemes }
+]
 
-const examThemes = {
-  midnight: { name: '午夜藍 (Midnight)', bg: '#0f172a', border: '#334155', title: '#f8fafc', clock: '#fbbf24', text: '#cbd5e1', accent: '#3b82f6', success: '#10b981', danger: '#ef4444', panelBg: '#1e293b' },
-  blackboard: { name: '經典黑板 (Blackboard)', bg: '#1a3627', border: '#5b3a1a', title: '#ffffff', clock: '#fbbf24', text: '#e2e8f0', accent: '#fca5a5', success: '#a7f3d0', danger: '#f87171', panelBg: '#234a36' },
-  slate: { name: '沉穩灰 (Slate)', bg: '#334155', border: '#64748b', title: '#f8fafc', clock: '#38bdf8', text: '#f1f5f9', accent: '#818cf8', success: '#34d399', danger: '#f87171', panelBg: '#475569' },
-  matcha: { name: '抹茶綠 (Matcha)', bg: '#2f3e36', border: '#5b6a5a', title: '#ecfdf5', clock: '#a7f3d0', text: '#d1fae5', accent: '#6ee7b7', success: '#10b981', danger: '#fca5a5', panelBg: '#3b4d45' },
-  burgundy: { name: '勃根地紅 (Burgundy)', bg: '#450a0a', border: '#7f1d1d', title: '#fee2e2', clock: '#fca5a5', text: '#fecaca', accent: '#f87171', success: '#a7f3d0', danger: '#fbbf24', panelBg: '#591111' },
-  ocean: { name: '深海湛藍 (Ocean)', bg: '#083344', border: '#164e63', title: '#cffafe', clock: '#67e8f9', text: '#a5f3fc', accent: '#22d3ee', success: '#34d399', danger: '#fca5a5', panelBg: '#114358' },
-  mocha: { name: '摩卡棕 (Mocha)', bg: '#3e2723', border: '#784315', title: '#fef3c7', clock: '#fde047', text: '#fde68a', accent: '#fbbf24', success: '#6ee7b7', danger: '#fca5a5', panelBg: '#5c3a21' },
-  purple: { name: '星空紫 (Purple)', bg: '#2e1065', border: '#4c1d95', title: '#ede9fe', clock: '#c4b5fd', text: '#ddd6fe', accent: '#a78bfa', success: '#6ee7b7', danger: '#fca5a5', panelBg: '#3b187d' },
-  retro: { name: '復古紙質 (Retro)', bg: '#e7e5e4', border: '#94a3b8', title: '#1c1917', clock: '#b45309', text: '#44403c', accent: '#78350f', success: '#15803d', danger: '#b91c1c', panelBg: '#f5f5f4' },
-  minimal: { name: '極簡白 (Minimal)', bg: '#ffffff', border: '#cbd5e1', title: '#0f172a', clock: '#0284c7', text: '#334155', accent: '#3b82f6', success: '#16a34a', danger: '#dc2626', panelBg: '#f8fafc' }
-}
+
 
 const defaultExamData = {
   isExamModeEnabled: true,
   theme: 'midnight',
+  displayMode: 'manual',
   displayDay: 1,
   days: [
     {
+      date: '',
       title: '新化國中第一次段考 第一天',
       periods: [
         { subject: '溫書', startTime: '07:30', endTime: '08:15', isExam: false },
@@ -304,12 +318,13 @@ const defaultExamData = {
       ],
       notes: []
     },
-    { title: '新化國中第一次段考 第二天', periods: [], notes: [] }
+    { date: '', title: '新化國中第一次段考 第二天', periods: [], notes: [] }
   ]
 }
 
 const examData = ref(normalizeExamSchedule(defaultExamData))
 const editedDay = computed(() => examData.value.days[editingDay.value - 1])
+const previewHomepageDay = computed(() => displayedExamSchedule(examData.value, taiwanDateISO(previewNow.value)).selectedDay)
 const leftTextColor = key => examData.value.leftTextColors[key] ||
   (key === 'header' ? (examThemes[examData.value.theme] || examThemes.midnight).title :
     (examThemes[examData.value.theme] || examThemes.midnight).text)
@@ -399,11 +414,13 @@ const previewCountdownText = computed(() => {
 
 
 onMounted(async () => {
+  previewTimer = setInterval(() => { previewNow.value = Date.now() }, 1000)
   if (sessionStorage.getItem('exams_admin_logged_in') === 'true') {
     isLoggedIn.value = true
     await fetchExamData()
   }
 })
+onUnmounted(() => { if (previewTimer) clearInterval(previewTimer) })
 
 const handleLogin = async () => {
   if (!passwordInput.value) return
@@ -543,6 +560,10 @@ const importNotes = (e) => {
 }
 
 const saveExamData = async () => {
+  if (examData.value.displayMode === 'automatic' && !hasValidExamDates(examData.value)) {
+    alert('請先設定兩個有效考試日期，且第二天必須晚於第一天。')
+    return
+  }
   isSaving.value = true
   try {
     const { error } = await supabase.from('system_settings').upsert({
@@ -583,6 +604,12 @@ const saveExamData = async () => {
 .toggle-label input { transform: scale(1.3); cursor: pointer;}
 .setting-desc { margin: 5px 0 0 32px; color: #64748b; font-size: 0.95rem; }
 .display-day-setting { border-bottom: 1px dashed #cbd5e1; padding-bottom: 20px; margin-bottom: 20px; }
+.display-day-setting h3 { margin: 0 0 15px; color: #334155; }
+.exam-date-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.exam-date-field { display: flex; flex-direction: column; gap: 8px; color: #334155; font-weight: bold; }
+.display-mode-options { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; }
+.display-mode-options label { display: inline-flex; align-items: center; gap: 6px; font-weight: bold; color: #334155; cursor: pointer; }
+.manual-day-field { margin-top: 16px; }
 .day-select { max-width: 240px; background: white; font-size: 1rem; }
 .display-day-setting .setting-desc, .font-settings .setting-desc { margin-left: 0; }
 .setting-warning { color: #b45309; font-weight: bold; margin-bottom: 0; }
@@ -600,8 +627,10 @@ const saveExamData = async () => {
 .color-control input[type="color"] { width: 42px; height: 34px; border: 1px solid #cbd5e1; border-radius: 5px; background: white; cursor: pointer; }
 
 .theme-selector-box { margin-top: 10px; }
+.theme-group { margin-top: 18px; }
+.theme-group h4 { margin: 0 0 10px; color: #475569; }
 .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; margin-top: 10px; }
-.theme-item { border: 2px solid transparent; border-radius: 8px; padding: 15px 10px; text-align: center; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
+.theme-item { border: 2px solid transparent; border-radius: 8px; padding: 15px 10px; text-align: center; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-family: inherit; width: 100%;}
 .theme-item:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
 .theme-item.is-selected { transform: scale(1.05); box-shadow: 0 0 0 3px #3b82f6, 0 4px 8px rgba(0,0,0,0.2); }
 .theme-name { font-weight: bold; font-size: 0.95rem;}

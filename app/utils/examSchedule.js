@@ -14,7 +14,28 @@ export const examLeftTextSettings = {
 
 const validColor = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : null
 
-const emptyDay = () => ({ title: '', periods: [], notes: [] })
+const emptyDay = () => ({ date: '', title: '', periods: [], notes: [] })
+
+export function isValidExamDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
+}
+
+export function taiwanDateISO(now = Date.now()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date(now))
+  const part = type => parts.find(item => item.type === type)?.value
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+export function hasValidExamDates(value) {
+  const dates = value?.days?.map(day => day?.date)
+  return Array.isArray(dates) && dates.length >= 2 &&
+    isValidExamDate(dates[0]) && isValidExamDate(dates[1]) && dates[0] < dates[1]
+}
 
 export function normalizeExamSchedule(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
@@ -23,6 +44,7 @@ export function normalizeExamSchedule(value) {
     const day = Array.isArray(source.days) ? source.days[index] : index === 0 ? source : null
     if (!day || typeof day !== 'object') return emptyDay()
     return {
+      date: isValidExamDate(day.date) ? day.date : '',
       title: typeof day.title === 'string' ? day.title : '',
       periods: Array.isArray(day.periods) ? day.periods.map(period => ({ ...period })) : [],
       notes: Array.isArray(day.notes) ? [...day.notes] : []
@@ -42,6 +64,7 @@ export function normalizeExamSchedule(value) {
   return {
     isExamModeEnabled: source.isExamModeEnabled !== false,
     theme: typeof source.theme === 'string' ? source.theme : 'midnight',
+    displayMode: source.displayMode === 'automatic' ? 'automatic' : 'manual',
     displayDay: source.displayDay === 2 ? 2 : 1,
     days,
     fontSizes,
@@ -50,10 +73,14 @@ export function normalizeExamSchedule(value) {
   }
 }
 
-export function displayedExamSchedule(value) {
+export function displayedExamSchedule(value, todayISO = taiwanDateISO()) {
   const schedule = normalizeExamSchedule(value)
-  const day = schedule.days[schedule.displayDay - 1]
-  return { ...schedule, title: day.title, periods: day.periods, notes: day.notes }
+  // Before day two, keep day one visible; from day two onward, show day two.
+  const selectedDay = schedule.displayMode === 'automatic' && hasValidExamDates(schedule)
+    ? (todayISO >= schedule.days[1].date ? 2 : 1)
+    : schedule.displayDay
+  const day = schedule.days[selectedDay - 1]
+  return { ...schedule, selectedDay, title: day.title, periods: day.periods, notes: day.notes }
 }
 
 export function examFontStyles(value) {

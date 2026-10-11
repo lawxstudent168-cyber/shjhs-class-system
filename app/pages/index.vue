@@ -270,7 +270,7 @@ const {
   youtubeSchedule, youtubeIsMuted, englishSongSchedule, parentNotices, classNoteItems, seatingChart, hygieneData,
   marqueeSettings, unreadMsgCount, assignmentsData, assignmentSubmissionsData, excludedAssignmentIds, goodArticles,
   expectedTeacherPwd, loadTeacherPwd, fetchData
-} = useHomeData(supabase, todayISO, isIpBrownlisted, activeRoleCategory, currentIdentity, allStudents, allStudentsForLogin, todayAttendances)
+} = useHomeData(supabase, todayISO, isIpBrownlisted, activeRoleCategory, currentIdentity, allStudents, allStudentsForLogin, todayAttendances, nowTick)
 
 // 4. ✨ 格式化與過濾器 (有了前面的 ref，現在可以呼叫了)
 const { privacyFilter, formatNL, formatDateTime } = useFormatters(isIpWhitelisted, allStudentsForLogin)

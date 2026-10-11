@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { displayedExamSchedule, examFontStyles, examLeftTextStyles, normalizeExamSchedule } from '../app/utils/examSchedule.js'
+import { displayedExamSchedule, examFontStyles, examLeftTextStyles, hasValidExamDates, normalizeExamSchedule, taiwanDateISO } from '../app/utils/examSchedule.js'
+import { classicExamThemes, examThemes, festivalExamThemes } from '../app/utils/examThemes.js'
 
 test('existing one-day exam data remains on day one after migration', () => {
   const saved = { title: '原考程', periods: [{ subject: '國文', startTime: '08:00', endTime: '09:00' }], notes: ['帶文具'], theme: 'ocean' }
@@ -8,7 +9,8 @@ test('existing one-day exam data remains on day one after migration', () => {
   assert.equal(migrated.days[0].title, '原考程')
   assert.equal(migrated.days[0].periods[0].subject, '國文')
   assert.deepEqual(migrated.days[0].notes, ['帶文具'])
-  assert.deepEqual(migrated.days[1], { title: '', periods: [], notes: [] })
+  assert.deepEqual(migrated.days[1], { date: '', title: '', periods: [], notes: [] })
+  assert.equal(migrated.displayMode, 'manual')
   assert.equal(displayedExamSchedule(saved).title, '原考程')
 })
 
@@ -56,4 +58,30 @@ test('left table text sizes and colors apply to normal and active rows', () => {
   assert.equal(styles['--ex-left-period-color'], '#445566')
   assert.equal(normalizeExamSchedule({ leftTextSizes: { time: 999 } }).leftTextSizes.time, 29)
   assert.equal(examLeftTextStyles({ leftTextColors: { subject: 'red' } }, theme)['--ex-left-subject-active-color'], '#00ff00')
+})
+
+test('automatic mode switches at midnight in Taiwan and manual mode keeps its selection', () => {
+  const saved = {
+    displayMode: 'automatic', displayDay: 1,
+    days: [
+      { date: '2026-10-11', title: '第一天', periods: [{ subject: '國文' }] },
+      { date: '2026-10-13', title: '第二天', periods: [{ subject: '數學' }] }
+    ]
+  }
+  assert.equal(hasValidExamDates(saved), true)
+  assert.equal(displayedExamSchedule(saved, '2026-10-12').selectedDay, 1)
+  assert.equal(displayedExamSchedule(saved, '2026-10-13').title, '第二天')
+  assert.equal(displayedExamSchedule(saved, '2026-10-14').selectedDay, 2)
+  assert.equal(displayedExamSchedule({ ...saved, displayMode: 'manual' }, '2026-10-14').selectedDay, 1)
+  assert.equal(taiwanDateISO(Date.UTC(2026, 9, 12, 16, 0)), '2026-10-13')
+  assert.equal(hasValidExamDates({ days: [{ date: '2026-02-30' }, { date: '2026-03-01' }] }), false)
+  assert.equal(hasValidExamDates({ days: [{ date: '2026-10-13' }, { date: '2026-10-11' }] }), false)
+})
+
+test('all original themes and twenty new festival themes are available', () => {
+  assert.equal(Object.keys(classicExamThemes).length, 10)
+  assert.equal(Object.keys(festivalExamThemes).length, 20)
+  assert.equal(Object.keys(examThemes).length, 30)
+  assert.equal(examThemes.midnight.bg, '#0f172a')
+  assert.equal(examThemes.lunarNewYear.name, '春節紅金')
 })
