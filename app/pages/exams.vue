@@ -45,6 +45,27 @@
           <p class="setting-desc">關閉此選項後，即使設定了考程，首頁也不會出現切換按鈕，適合平時隱藏功能。</p>
         </div>
 
+        <div class="display-day-setting">
+          <label class="main-label" for="display-day">🏠 首頁大考看板要顯示哪一天？</label>
+          <select id="display-day" v-model.number="examData.displayDay" class="form-control day-select">
+            <option :value="1">第一天</option>
+            <option :value="2">第二天</option>
+          </select>
+          <p class="setting-desc">手動指定，儲存後首頁只顯示所選日期的標題、考程和考前提醒；不會依照今天日期自動切換。</p>
+          <p v-if="!examData.days[examData.displayDay - 1].periods.length" class="setting-warning">目前選擇的日期還沒有考試節次，首頁不會顯示大考看板按鈕。</p>
+        </div>
+
+        <div class="font-settings">
+          <h3>🔠 看板右側與考前提醒文字大小</h3>
+          <div class="font-settings-grid">
+            <label v-for="(setting, key) in examFontSettings" :key="key" class="font-setting">
+              <span>{{ setting.label }}：{{ examData.fontSizes[key] }} px</span>
+              <input v-model.number="examData.fontSizes[key]" type="range" :min="setting.min" :max="setting.max" step="2" />
+            </label>
+          </div>
+          <p class="setting-desc">拖曳後可在下方看板預覽，按「儲存所有設定」才會更新首頁。</p>
+        </div>
+
         <div class="theme-selector-box">
           <label class="main-label">🎨 選擇大考看板主題風格：</label>
           <div class="theme-grid">
@@ -63,9 +84,15 @@
       </div>
 
       <div class="exam-editor-card">
+        <div class="day-tabs" role="group" aria-label="選擇編輯的考試日期">
+          <button v-for="day in [1, 2]" :key="day" type="button" class="day-tab"
+            :class="{ 'is-active': editingDay === day }" :aria-pressed="editingDay === day"
+            @click="editingDay = day">{{ day === 1 ? '第一天' : '第二天' }}</button>
+        </div>
+        <p class="editing-hint">目前編輯：第 {{ editingDay }} 天。兩天的標題、節次及提醒分開儲存；首頁顯示日期由上方設定指定。</p>
         <div class="form-group">
-          <label class="main-label">大考標題名稱：</label>
-          <input type="text" v-model="examData.title" class="form-control title-input" placeholder="例：新化國中第一次段考 第一天" />
+          <label class="main-label">第 {{ editingDay }} 天大考標題名稱：</label>
+          <input type="text" v-model="editedDay.title" class="form-control title-input" :placeholder="`例：新化國中第一次段考 第${editingDay}天`" />
         </div>
 
         <div class="periods-container">
@@ -86,10 +113,10 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-if="examData.periods.length === 0">
+              <tr v-if="editedDay.periods.length === 0">
                 <td colspan="6" class="empty-msg">目前無任何考試節次，請點擊右上方新增。</td>
               </tr>
-              <tr v-for="(period, index) in examData.periods" :key="index">
+              <tr v-for="(period, index) in editedDay.periods" :key="index">
                 <td><strong>{{ index + 1 }}</strong></td>
                 <td><input type="text" v-model="period.subject" class="form-control text-center" placeholder="例：國文" /></td>
                 <td><input type="time" v-model="period.startTime" class="form-control time-ctrl" /></td>
@@ -122,12 +149,12 @@
           </div>
           
           <div class="notes-list">
-            <div v-for="(note, idx) in examData.notes" :key="'note-'+idx" class="note-edit-row">
+            <div v-for="(note, idx) in editedDay.notes" :key="'note-'+idx" class="note-edit-row">
               <span class="note-idx">{{ idx + 1 }}.</span>
-              <input type="text" v-model="examData.notes[idx]" class="form-control" placeholder="輸入提醒事項... (例：手機請關機並放至教室前後)" />
+              <input type="text" v-model="editedDay.notes[idx]" class="form-control" placeholder="輸入提醒事項... (例：手機請關機並放至教室前後)" />
               <button @click="removeNote(idx)" class="btn-delete">🗑️</button>
             </div>
-            <div v-if="examData.notes.length === 0" class="empty-msg" style="text-align: left; padding: 10px 0 !important;">目前無提醒事項。</div>
+            <div v-if="editedDay.notes.length === 0" class="empty-msg" style="text-align: left; padding: 10px 0 !important;">目前無提醒事項。</div>
             <button @click="addNote" class="btn-add mt-10">➕ 新增提醒事項</button>
           </div>
         </div>
@@ -135,7 +162,7 @@
 
       <div class="preview-section-wrapper">
         <div class="preview-header">
-          <h3>👀 預覽大考看板</h3>
+          <h3>👀 預覽第 {{ editingDay }} 天大考看板</h3>
           <div class="mock-controls">
             <label>測試假定時間：</label>
             <input type="time" v-model="mockTime" class="form-control mock-input" />
@@ -145,7 +172,7 @@
 
         <div class="preview-scale-container">
           <div class="exam-dashboard-preview" :style="currentThemeStyles">
-            <h1 class="exam-main-title">{{ examData.title || '尚未設定標題' }}</h1>
+            <h1 class="exam-main-title">{{ editedDay.title || '尚未設定標題' }}</h1>
             
             <div class="exam-split-layout">
               <div class="exam-left-panel">
@@ -201,10 +228,10 @@
                 </div>
 
                 <!-- 💡 新增：大考提醒事項展示區 -->
-                <div class="exam-notes-display" v-if="examData.notes && examData.notes.length > 0">
+                <div class="exam-notes-display" v-if="editedDay.notes.length > 0">
                   <h4 class="notes-title">⚠️ 考前提醒</h4>
                   <ul class="notes-list-preview">
-                    <li v-for="(note, idx) in examData.notes" :key="'p-note-'+idx">{{ note }}</li>
+                    <li v-for="(note, idx) in editedDay.notes" :key="'p-note-'+idx">{{ note }}</li>
                   </ul>
                 </div>
 
@@ -220,6 +247,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { examFontSettings, examFontStyles, normalizeExamSchedule } from '../utils/examSchedule.js'
 const supabase = useSupabaseClient()
 
 const isLoggedIn = ref(false)
@@ -228,6 +256,7 @@ const passwordInput = ref('')
 const isSaving = ref(false)
 
 const mockTime = ref('08:30')
+const editingDay = ref(1)
 
 const examThemes = {
   midnight: { name: '午夜藍 (Midnight)', bg: '#0f172a', border: '#334155', title: '#f8fafc', clock: '#fbbf24', text: '#cbd5e1', accent: '#3b82f6', success: '#10b981', danger: '#ef4444', panelBg: '#1e293b' },
@@ -245,17 +274,24 @@ const examThemes = {
 const defaultExamData = {
   isExamModeEnabled: true,
   theme: 'midnight',
-  title: '新化國中第一次段考 第一天',
-  periods: [
-    { subject: '溫書', startTime: '07:30', endTime: '08:15', isExam: false },
-    { subject: '國文', startTime: '08:20', endTime: '09:05', isExam: true },
-    { subject: '溫書', startTime: '09:15', endTime: '10:00', isExam: false },
-    { subject: '數學', startTime: '10:10', endTime: '10:55', isExam: true }
-  ],
-  notes: [] // 💡 新增筆記預設結構
+  displayDay: 1,
+  days: [
+    {
+      title: '新化國中第一次段考 第一天',
+      periods: [
+        { subject: '溫書', startTime: '07:30', endTime: '08:15', isExam: false },
+        { subject: '國文', startTime: '08:20', endTime: '09:05', isExam: true },
+        { subject: '溫書', startTime: '09:15', endTime: '10:00', isExam: false },
+        { subject: '數學', startTime: '10:10', endTime: '10:55', isExam: true }
+      ],
+      notes: []
+    },
+    { title: '新化國中第一次段考 第二天', periods: [], notes: [] }
+  ]
 }
 
-const examData = ref(JSON.parse(JSON.stringify(defaultExamData)))
+const examData = ref(normalizeExamSchedule(defaultExamData))
+const editedDay = computed(() => examData.value.days[editingDay.value - 1])
 
 const currentThemeStyles = computed(() => {
   const t = examThemes[examData.value.theme] || examThemes.midnight
@@ -268,12 +304,13 @@ const currentThemeStyles = computed(() => {
     '--ex-accent': t.accent,
     '--ex-success': t.success,
     '--ex-danger': t.danger,
-    '--ex-panel-bg': t.panelBg
+    '--ex-panel-bg': t.panelBg,
+    ...examFontStyles(examData.value)
   }
 })
 
 const previewStatus = computed(() => {
-  if (!examData.value.periods || examData.value.periods.length === 0) return { state: 'WAITING', periods: [] }
+  if (!editedDay.value.periods.length) return { state: 'WAITING', periods: [] }
 
   if (!mockTime.value) return { state: 'WAITING', periods: [] }
   
@@ -284,7 +321,7 @@ const previewStatus = computed(() => {
   let next = null
   let state = 'WAITING'
 
-  const periods = JSON.parse(JSON.stringify(examData.value.periods))
+  const periods = JSON.parse(JSON.stringify(editedDay.value.periods))
 
   for (let i = 0; i < periods.length; i++) {
     const p = periods[i]
@@ -376,40 +413,38 @@ const logout = () => { sessionStorage.removeItem('exams_admin_logged_in'); isLog
 const fetchExamData = async () => {
   const { data } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'exam_schedule_data').maybeSingle()
   if (data?.setting_value) {
-    examData.value = { ...defaultExamData, ...data.setting_value }
-    if (!examData.value.notes) examData.value.notes = [] // 保證陣列存在
+    examData.value = normalizeExamSchedule(data.setting_value)
   } else {
-    examData.value = JSON.parse(JSON.stringify(defaultExamData))
+    examData.value = normalizeExamSchedule(defaultExamData)
   }
 }
 
 const addPeriod = () => {
-  examData.value.periods.push({ subject: '', startTime: '', endTime: '', isExam: true })
+  editedDay.value.periods.push({ subject: '', startTime: '', endTime: '', isExam: true })
 }
 
 const removePeriod = (index) => {
-  examData.value.periods.splice(index, 1)
+  editedDay.value.periods.splice(index, 1)
 }
 
 // 💡 提醒事項操作邏輯
 const addNote = () => {
-  if (!examData.value.notes) examData.value.notes = []
-  examData.value.notes.push('')
+  editedDay.value.notes.push('')
 }
 
 const removeNote = (index) => {
-  examData.value.notes.splice(index, 1)
+  editedDay.value.notes.splice(index, 1)
 }
 
 const saveNotesTemplate = () => {
-  localStorage.setItem('exam_notes_template', JSON.stringify(examData.value.notes || []))
+  localStorage.setItem('exam_notes_template', JSON.stringify(editedDay.value.notes))
   alert('✅ 提醒事項已成功暫存至瀏覽器本機範本！')
 }
 
 const loadNotesTemplate = () => {
   const tmpl = localStorage.getItem('exam_notes_template')
   if (tmpl) {
-    examData.value.notes = JSON.parse(tmpl)
+    editedDay.value.notes = JSON.parse(tmpl)
     alert('✅ 本機範本載入成功！')
   } else {
     alert('❌ 找不到暫存的範本資料。')
@@ -417,7 +452,7 @@ const loadNotesTemplate = () => {
 }
 
 const exportNotes = (format) => {
-  const notes = examData.value.notes || []
+  const notes = editedDay.value.notes
   let content = ''
   let mime = ''
   let filename = ''
@@ -451,7 +486,7 @@ const importNotes = (e) => {
       try {
         const parsed = JSON.parse(text)
         if (Array.isArray(parsed)) {
-          examData.value.notes = parsed
+          editedDay.value.notes = parsed
           alert('✅ JSON 範本匯入成功！')
         } else {
           alert('❌ JSON 格式不正確 (內容必須為陣列)。')
@@ -472,7 +507,7 @@ const importNotes = (e) => {
           return str
         }).filter(l => l)
 
-        examData.value.notes = parsed
+        editedDay.value.notes = parsed
         alert('✅ CSV 範本匯入成功！')
       } catch(err) {
         alert('❌ CSV 解析失敗。')
@@ -490,7 +525,7 @@ const saveExamData = async () => {
   try {
     const { error } = await supabase.from('system_settings').upsert({
       setting_key: 'exam_schedule_data',
-      setting_value: examData.value
+      setting_value: normalizeExamSchedule(examData.value)
     }, { onConflict: 'setting_key' })
     if (error) throw error
     alert('✅ 大考設定已成功儲存並同步！')
@@ -525,6 +560,14 @@ const saveExamData = async () => {
 .toggle-label { font-weight: bold; font-size: 1.1rem; color: #1e293b; cursor: pointer; display: flex; align-items: center; gap: 10px;}
 .toggle-label input { transform: scale(1.3); cursor: pointer;}
 .setting-desc { margin: 5px 0 0 32px; color: #64748b; font-size: 0.95rem; }
+.display-day-setting { border-bottom: 1px dashed #cbd5e1; padding-bottom: 20px; margin-bottom: 20px; }
+.day-select { max-width: 240px; background: white; font-size: 1rem; }
+.display-day-setting .setting-desc, .font-settings .setting-desc { margin-left: 0; }
+.setting-warning { color: #b45309; font-weight: bold; margin-bottom: 0; }
+.font-settings h3 { margin: 0 0 15px; color: #334155; }
+.font-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 24px; }
+.font-setting { display: flex; flex-direction: column; gap: 8px; color: #334155; font-weight: bold; }
+.font-setting input { width: 100%; cursor: pointer; }
 
 .theme-selector-box { margin-top: 10px; }
 .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; margin-top: 10px; }
@@ -534,6 +577,10 @@ const saveExamData = async () => {
 .theme-name { font-weight: bold; font-size: 0.95rem;}
 
 .exam-editor-card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px;}
+.day-tabs { display: flex; gap: 10px; margin-bottom: 10px; }
+.day-tab { padding: 10px 24px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #334155; cursor: pointer; font-weight: bold; }
+.day-tab.is-active { background: #991b1b; border-color: #991b1b; color: white; }
+.editing-hint { margin: 0 0 20px; color: #64748b; }
 .main-label { font-size: 1.1rem; font-weight: bold; color: #1e293b; margin-bottom: 8px; display: block;}
 .title-input { font-size: 1.2rem; font-weight: bold; padding: 15px; background: #f8fafc; border: 1px dashed #94a3b8; }
 .title-input:focus { background: white; border-color: #dc2626; outline: none; }
@@ -601,29 +648,29 @@ const saveExamData = async () => {
 
 .exam-right-panel { flex: 1; max-width: 700px; background: var(--ex-panel-bg); border-radius: 20px; padding: 40px; text-align: center; border: 1px solid var(--ex-border); box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column; justify-content: flex-start; align-items: center;}
 .clock-label { font-size: 1.5rem; color: var(--ex-text); margin-bottom: 10px; opacity: 0.8;}
-.exam-clock { font-size: 6rem; font-weight: bold; font-family: monospace; color: var(--ex-clock); margin-bottom: 30px; line-height: 1; }
+.exam-clock { font-size: var(--ex-clock-size, 120px); font-weight: bold; font-family: monospace; color: var(--ex-clock); margin-bottom: 30px; line-height: 1; }
 
 .exam-status-display { width: 100%; border-top: 1px solid var(--ex-border); padding-top: 30px;}
 .status-text { font-size: 2.5rem; font-weight: bold; }
 .status-text.waiting { color: var(--ex-text); opacity: 0.7;}
 .status-text.finished { color: var(--ex-success); }
 .status-label { font-size: 1.5rem; color: var(--ex-text); margin-bottom: 10px; opacity: 0.8;}
-.status-subject { font-size: 4.5rem; color: var(--ex-accent); letter-spacing: 5px; line-height: 1.2; margin: 10px 0 30px 0;}
+.status-subject { font-size: var(--ex-subject-size, 88px); color: var(--ex-accent); letter-spacing: 5px; line-height: 1.2; margin: 10px 0 30px 0; overflow-wrap: anywhere;}
 .countdown-wrapper { background: rgba(0,0,0,0.2); padding: 25px; border-radius: 16px; border: 1px solid var(--ex-border);}
 .countdown-label { font-size: 1.5rem; color: var(--ex-text); margin-bottom: 10px; }
-.exam-countdown { font-size: 5rem; color: var(--ex-success); font-family: monospace; line-height: 1; }
+.exam-countdown { font-size: var(--ex-countdown-size, 104px); color: var(--ex-success); font-family: monospace; line-height: 1; }
 .text-danger { color: var(--ex-danger) !important; animation: blink 1s infinite; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
 .study-mode-text { font-size: 3rem; color: var(--ex-success); letter-spacing: 2px; margin-top: 20px; padding: 20px; border: 2px dashed var(--ex-success); border-radius: 12px; background: rgba(16, 185, 129, 0.1);}
 
 .status-text.break .status-next { margin-top: 20px; font-size: 2rem; color: var(--ex-text); }
-.status-text.break .highlight { color: var(--ex-success); font-size: 3rem; margin: 15px 0; display: block;}
-.next-time { font-size: 1.5rem; color: var(--ex-text); font-family: monospace; opacity: 0.8;}
+.status-text.break .highlight { color: var(--ex-success); font-size: var(--ex-next-subject-size, 57px); margin: 15px 0; display: block; overflow-wrap: anywhere;}
+.next-time { font-size: var(--ex-next-time-size, 30px); color: var(--ex-text); font-family: monospace; opacity: 0.8;}
 
 /* 💡 預覽區提醒事項 CSS */
 .exam-notes-display { margin-top: 30px; background: rgba(255,255,255,0.05); border: 2px dashed var(--ex-border); border-radius: 12px; padding: 20px; text-align: left; width: 100%;}
-.notes-title { font-size: 1.8rem; margin: 0 0 15px 0; color: var(--ex-danger); border-bottom: 1px dashed var(--ex-border); padding-bottom: 10px;}
-.notes-list-preview { margin: 0; padding-left: 30px; font-size: 1.5rem; line-height: 1.6; color: var(--ex-text); }
+.notes-title { font-size: calc(var(--ex-notes-size, 24px) + 5px); margin: 0 0 15px 0; color: var(--ex-danger); border-bottom: 1px dashed var(--ex-border); padding-bottom: 10px;}
+.notes-list-preview { margin: 0; padding-left: 30px; font-size: var(--ex-notes-size, 24px); line-height: 1.6; color: var(--ex-text); }
 .notes-list-preview li { margin-bottom: 8px; }
 </style>

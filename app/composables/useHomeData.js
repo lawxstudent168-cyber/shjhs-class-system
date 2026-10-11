@@ -1,4 +1,5 @@
 import { ref, computed, unref } from 'vue'
+import { displayedExamSchedule } from '../utils/examSchedule.js'
 
 export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCategoryRef, currentIdentityRef, allStudentsRef, allStudentsForLoginRef, todayAttendancesRef) {
   const contactBookItems = ref([])
@@ -23,7 +24,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
   const isNoticeBoardVisibleOnIndex = ref(true)
   const scheduleData = ref(null)
   const scheduleButtonConfig = ref({ isVisible: false, visibility: 'both', teacherOnlyInBrownlist: true })
-  const examData = ref({ isExamModeEnabled: true, theme: 'midnight', title: '', periods: [] })
+  const examData = ref(displayedExamSchedule())
   const autoRefreshConfig = ref({ classTime: 60, breakTime: 60, weekend: 60 }) 
   
   const indexModulesConfig = ref([
@@ -117,7 +118,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
             case 'parent_notices_board_visible': isNoticeBoardVisibleOnIndex.value = v; break
             case 'class_schedule_data': scheduleData.value = v; break
             case 'schedule_button_settings': scheduleButtonConfig.value = { teacherOnlyInBrownlist: true, ...v }; break
-            case 'exam_schedule_data': examData.value = { ...examData.value, ...v }; break
+            case 'exam_schedule_data': examData.value = displayedExamSchedule(v); break
             case 'index_auto_refresh_config': if (typeof v === 'object') autoRefreshConfig.value = { ...autoRefreshConfig.value, ...v }; break
             case 'index_auto_refresh_seconds': if (!sysData.find(x => x.setting_key === 'index_auto_refresh_config')) { const oldVal = Number(v) || 60; autoRefreshConfig.value = { classTime: oldVal, breakTime: oldVal, weekend: oldVal } }; break
             case 'index_modules_config': 

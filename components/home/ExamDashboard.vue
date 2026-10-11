@@ -101,27 +101,27 @@ defineEmits(['exit'])
 
 .exam-right-panel { flex: 1; max-width: 800px; background: var(--ex-panel-bg); border-radius: 20px; padding: 50px; text-align: center; border: 1px solid var(--ex-border); box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column; justify-content: flex-start; align-items: center;}
 .clock-label { font-size: 1.5rem; color: var(--ex-text); margin-bottom: 10px; opacity: 0.8;}
-.exam-clock { font-size: 7.5rem; font-weight: bold; font-family: monospace; color: var(--ex-clock); margin-bottom: 40px; line-height: 1; text-shadow: 0 0 15px rgba(0,0,0,0.3);}
+.exam-clock { font-size: var(--ex-clock-size, 120px); font-weight: bold; font-family: monospace; color: var(--ex-clock); margin-bottom: 40px; line-height: 1; text-shadow: 0 0 15px rgba(0,0,0,0.3);}
 .exam-status-display { width: 100%; border-top: 1px solid var(--ex-border); padding-top: 40px;}
 .status-text { font-size: 2.5rem; font-weight: bold; }
 .status-text.waiting { color: var(--ex-text); opacity: 0.7;}
 .status-text.finished { color: var(--ex-success); }
 .status-label { font-size: 1.5rem; color: var(--ex-text); margin-bottom: 10px; opacity: 0.8;}
-.status-subject { font-size: 5.5rem; color: var(--ex-accent); letter-spacing: 5px; line-height: 1.2; margin: 10px 0 40px 0; text-shadow: 0 0 15px rgba(0,0,0,0.3);}
+.status-subject { font-size: var(--ex-subject-size, 88px); color: var(--ex-accent); letter-spacing: 5px; line-height: 1.2; margin: 10px 0 40px 0; text-shadow: 0 0 15px rgba(0,0,0,0.3); overflow-wrap: anywhere;}
 .countdown-wrapper { background: rgba(0,0,0,0.2); padding: 30px; border-radius: 16px; border: 1px solid var(--ex-border);}
 .countdown-label { font-size: 1.5rem; color: var(--ex-text); margin-bottom: 10px; }
-.exam-countdown { font-size: 6.5rem; color: var(--ex-success); font-family: monospace; line-height: 1; text-shadow: 0 0 15px rgba(0,0,0,0.3);}
+.exam-countdown { font-size: var(--ex-countdown-size, 104px); color: var(--ex-success); font-family: monospace; line-height: 1; text-shadow: 0 0 15px rgba(0,0,0,0.3);}
 .text-danger { color: var(--ex-danger) !important; animation: blink 1s infinite; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 .study-mode-text { font-size: 4rem; color: var(--ex-success); letter-spacing: 2px; margin-top: 20px; padding: 30px; border: 2px dashed var(--ex-success); border-radius: 16px; background: rgba(255,255,255, 0.05);}
 .status-text.break .status-next { margin-top: 20px; font-size: 2rem; color: var(--ex-text); }
-.status-text.break .highlight { color: var(--ex-success); font-size: 3.5rem; margin: 15px 0; display: block;}
-.next-time { font-size: 1.8rem; color: var(--ex-text); font-family: monospace; opacity: 0.8;}
+.status-text.break .highlight { color: var(--ex-success); font-size: var(--ex-next-subject-size, 57px); margin: 15px 0; display: block; overflow-wrap: anywhere;}
+.next-time { font-size: var(--ex-next-time-size, 30px); color: var(--ex-text); font-family: monospace; opacity: 0.8;}
 
 /* 💡 前台提醒事項 CSS */
 .exam-notes-display { margin-top: 30px; background: rgba(255,255,255,0.05); border: 2px dashed var(--ex-border); border-radius: 12px; padding: 20px; text-align: left; width: 100%; box-sizing: border-box;}
-.notes-title { font-size: 1.8rem; margin: 0 0 15px 0; color: var(--ex-danger); border-bottom: 1px dashed var(--ex-border); padding-bottom: 10px;}
-.notes-list-preview { margin: 0; padding-left: 30px; font-size: 1.5rem; line-height: 1.6; color: var(--ex-text); }
+.notes-title { font-size: calc(var(--ex-notes-size, 24px) + 5px); margin: 0 0 15px 0; color: var(--ex-danger); border-bottom: 1px dashed var(--ex-border); padding-bottom: 10px;}
+.notes-list-preview { margin: 0; padding-left: 30px; font-size: var(--ex-notes-size, 24px); line-height: 1.6; color: var(--ex-text); }
 .notes-list-preview li { margin-bottom: 8px; }
 
 @media (max-width: 1024px) {
@@ -134,8 +134,8 @@ defineEmits(['exit'])
   .exam-main-title { font-size: 2rem; }
   .exam-table { font-size: 1.2rem; }
   .exam-table th, .exam-table td { padding: 12px; }
-  .exam-clock { font-size: 5rem; }
-  .status-subject { font-size: 4rem; }
-  .exam-countdown { font-size: 4rem; }
+  .exam-clock { font-size: min(var(--ex-clock-size, 120px), 15vw); }
+  .status-subject { font-size: min(var(--ex-subject-size, 88px), 12vw); }
+  .exam-countdown { font-size: min(var(--ex-countdown-size, 104px), 14vw); }
 }
 </style>

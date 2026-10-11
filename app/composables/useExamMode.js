@@ -1,5 +1,6 @@
 // app/composables/useExamMode.js
 import { computed } from 'vue'
+import { examFontStyles } from '../utils/examSchedule.js'
 
 export function useExamMode(examDataRef, nowTickRef) {
   const examThemes = {
@@ -12,7 +13,7 @@ export function useExamMode(examDataRef, nowTickRef) {
 
   const currentThemeStyles = computed(() => {
     const t = examThemes[examDataRef.value.theme] || examThemes.midnight
-    return { '--ex-bg': t.bg, '--ex-border': t.border, '--ex-title': t.title, '--ex-clock': t.clock, '--ex-text': t.text, '--ex-accent': t.accent, '--ex-success': t.success, '--ex-danger': t.danger, '--ex-panel-bg': t.panelBg }
+    return { '--ex-bg': t.bg, '--ex-border': t.border, '--ex-title': t.title, '--ex-clock': t.clock, '--ex-text': t.text, '--ex-accent': t.accent, '--ex-success': t.success, '--ex-danger': t.danger, '--ex-panel-bg': t.panelBg, ...examFontStyles(examDataRef.value) }
   })
 
   const examStatus = computed(() => {
