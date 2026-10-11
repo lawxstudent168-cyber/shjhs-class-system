@@ -195,33 +195,40 @@
             {{ isSavingPrintTemplate ? '儲存中...' : '💾 存為列印範本' }}
           </button>
         </div>
-        <p class="help-text">
-          系統將自動複製此內容並產生 <strong>26 張</strong>相同的須知單，讓您直接使用 A4 紙列印後裁剪，發給全班學生。
-        </p>
+        <p class="help-text">以一張 A4 紙輸出左右兩份相同須知單，沿中央裁切。紙本內容會自動隱藏網址；需要提供的連結請在下方加入 QR code。</p>
         
         <div class="form-group">
           <label>紙本須知單內容：(變數: <span v-pre>{{須知清單}}</span>、<span v-pre>{{今日日期}}</span>)</label>
           <textarea v-model="printContentTemplate" rows="8" class="edit-input textarea-input"></textarea>
         </div>
 
-        <!-- 💡 核心新增：QR Code 網址設定區塊 -->
         <div class="form-group">
-          <label style="color:#0284c7;">🔗 附加 QR Code 網址 (選填)：</label>
-          <input type="url" v-model="printQrUrl" class="custom-input" placeholder="例如：https://forms.gle/..." />
-          <span class="hint">若填寫網址，系統會在每張列印單的右下角，自動產生一個 QR Code 供家長手機掃描。</span>
+          <label style="color:#0284c7;">🔗 附加 QR code（選填，最多 8 個）：</label>
+          <div v-for="(qr, index) in printQrCodes" :key="index" class="link-row">
+            <input v-model="qr.name" type="text" class="custom-input flex-1" placeholder="QR code 名稱（印在下方）" />
+            <input v-model="qr.url" type="url" class="custom-input flex-2" placeholder="https://..." />
+            <button type="button" class="del-row-btn" @click="printQrCodes.splice(index, 1)">✖</button>
+          </div>
+          <button type="button" class="btn-outline-primary" :disabled="printQrCodes.length >= 8" @click="printQrCodes.push({ name: '', url: '' })">➕ 新增 QR code</button>
+          <span class="hint">按「存為列印範本」可暫存文字及 QR code 設定；不會改動網頁或信件內容。</span>
         </div>
         
         <div class="email-preview-section">
-          <h5>👀 單張須知單預覽 (包含自動生成的 QR Code)</h5>
-          <div class="preview-box plain-text-preview">
-            <!-- 💡 將渲染變為我們計算過的完整 HTML (包含圖片) -->
-            <div class="preview-body" v-html="printPreviewHtml"></div>
+          <h5>👀 紙本內容預覽（PDF 將左右各印一份）</h5>
+          <div class="preview-box plain-text-preview print-preview-slip">
+            <div class="print-preview-text">{{ printPreviewText }}</div>
+            <div v-if="printQrPreview.length" class="print-qr-list">
+              <div v-for="qr in printQrPreview" :key="qr.url" class="print-qr-item">
+                <img :src="qr.image" :alt="qr.name" />
+                <span>{{ qr.name }}</span>
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="send-action-bar">
-          <button @click="triggerPrint" class="email-btn print-btn">
-            📄 產生預覽列印 / 匯出 PDF (共 26 張)
+          <button @click="triggerPrint" class="email-btn print-btn" :disabled="isPreparingPrint">
+            {{ isPreparingPrint ? '正在產生 QR code...' : '📄 開啟單頁列印 / 匯出 PDF' }}
           </button>
         </div>
       </div>
@@ -285,18 +292,12 @@
 
     </div>
 
-    <!-- 💡 列印專屬區塊：使用帶有 QR Code 的完整 HTML -->
-    <div class="print-only-container">
-      <div v-for="n in 26" :key="'print-'+n" class="print-slip">
-        <div class="slip-content" v-html="printPreviewHtml"></div>
-      </div>
-    </div>
-
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { removePrintUrls, escapePrintHtml, normalizePrintQrCodes, isPrintQrUrl } from '../utils/noticePrint.js'
 const supabase = useSupabaseClient()
 
 const activeTab = ref('manage')
@@ -321,10 +322,11 @@ const isSavingNoticeTemplate = ref(false)
 const noticeEmailSubjectTemplate = ref('📢 班級須知推播 ({{今日日期}})')
 const noticeEmailContentTemplate = ref(`各位家長您好，今日班級重要須知推播如下：\n\n{{須知清單}}\n\n(若此信件進入垃圾郵件，請將導師信箱加入通訊錄或標示為非垃圾郵件)\n\n班級導師 敬上`)
 
-// 💡 增加 QR Code URL 狀態變數
 const isSavingPrintTemplate = ref(false)
 const printContentTemplate = ref(`【家長聯絡事項單】\n發布日期：{{今日日期}}\n\n親愛的家長您好，今日班級重要須知如下：\n\n{{須知清單}}\n\n煩請您詳閱並於下方簽名，讓孩子明日繳回，感謝您的配合！\n\n家長簽名：_________________________`)
-const printQrUrl = ref('')
+const printQrCodes = ref([])
+const printQrPreview = ref([])
+const isPreparingPrint = ref(false)
 
 const availableRecipients = ref([])
 const isLoadingEmails = ref(true)
@@ -335,8 +337,6 @@ const historicalNotices = ref([])
 const isEditingHistory = ref(false)
 const isSavingHistory = ref(false)
 const editHistoryNotices = ref([])
-
-const formatNL = (txt) => String(txt || '').replace(/\n/g, '<br>')
 
 const updateNewNoticeRichText = (event) => { newNotice.value.content = event.target.innerHTML }
 const updateEditHistoryRichText = (event, index) => { editHistoryNotices.value[index] = event.target.innerHTML }
@@ -368,12 +368,12 @@ const fetchData = async () => {
     printContentTemplate.value = printTmplData.content.replace(/<br\s*\/?>/ig, '\n').replace(/<[^>]+>/g, '') 
   }
 
-  // 💡 同時載入 QR Code 網址與首頁可見度狀態
-  const { data: sysData } = await supabase.from('system_settings').select('*').in('setting_key', ['parent_notices_board_visible', 'print_qr_url'])
+  const { data: sysData } = await supabase.from('system_settings').select('*').in('setting_key', ['parent_notices_board_visible', 'print_qr_url', 'print_qr_codes'])
   if (sysData && sysData.length > 0) {
+    const settings = Object.fromEntries(sysData.map(s => [s.setting_key, s.setting_value]))
+    printQrCodes.value = normalizePrintQrCodes(settings.print_qr_codes, settings.print_qr_url)
     sysData.forEach(s => {
       if (s.setting_key === 'parent_notices_board_visible') isVisibleOnIndex.value = s.setting_value
-      if (s.setting_key === 'print_qr_url') printQrUrl.value = s.setting_value || ''
     })
   }
 
@@ -486,31 +486,30 @@ const activeNoticesPlainText = computed(() => {
 const noticePreviewSubject = computed(() => noticeEmailSubjectTemplate.value.replace(/{{今日日期}}/g, todayDisplay))
 const noticePreviewContent = computed(() => noticeEmailContentTemplate.value.replace(/{{須知清單}}/g, activeNoticesPlainText.value))
 
-// 💡 計算最終列印用的 HTML，包含自動附加的 QR Code 圖片
-const printPreviewHtml = computed(() => {
-  let text = printContentTemplate.value
-    .replace(/{{今日日期}}/g, todayDisplay)
-    .replace(/{{須知清單}}/g, activeNoticesPlainText.value)
-
-  let html = formatNL(text)
-
-  if (printQrUrl.value && printQrUrl.value.trim() !== '') {
-    // 呼叫開源無限制的 QR Server API 產生圖片
-    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(printQrUrl.value.trim())}`
-    
-    // 將 QR 碼區塊附加在排版的最後方 (靠右對齊)
-    html += `
-      <div style="display: flex; justify-content: flex-end; align-items: flex-end; margin-top: 15px;">
-        <div style="text-align: center;">
-          <img src="${qrSrc}" alt="QR Code" style="width: 80px; height: 80px; border: 2px solid #cbd5e1; padding: 2px; border-radius: 4px;" />
-          <div style="font-size: 0.8rem; color: #475569; margin-top: 4px; font-weight: bold;">手機掃描查看</div>
-        </div>
-      </div>
-    `
-  }
-
-  return html
+const activeNoticesPrintText = computed(() => {
+  const active = notices.value.filter(n => !n.isHidden && isActiveToday(n.startDate, n.endDate))
+  if (!active.length) return '(今日尚無生效的須知事項)'
+  return active.map((notice, index) => `${index + 1}. ${removePrintUrls(stripHtmlToPlainText(notice.content))}`)
+    .filter(Boolean).join('\n\n')
 })
+
+const printPreviewText = computed(() => removePrintUrls(printContentTemplate.value
+    .replace(/{{今日日期}}/g, todayDisplay)
+    .replace(/{{須知清單}}/g, activeNoticesPrintText.value)))
+
+let qrPreviewRevision = 0
+const generateQrPreview = async () => {
+  const revision = ++qrPreviewRevision
+  const valid = printQrCodes.value.filter(qr => qr.name.trim() && isPrintQrUrl(qr.url))
+  if (!valid.length) { printQrPreview.value = []; return }
+  const { default: QRCode } = await import('qrcode')
+  const generated = await Promise.all(valid.map(async qr => ({
+    name: qr.name.trim(), url: qr.url.trim(),
+    image: await QRCode.toDataURL(qr.url.trim(), { width: 180, margin: 1 })
+  })))
+  if (revision === qrPreviewRevision) printQrPreview.value = generated
+}
+watch(printQrCodes, () => { generateQrPreview().catch(error => console.error('無法產生 QR code', error)) }, { deep: true })
 
 const editNotice = (notice) => {
   editingNoticeId.value = notice.id
@@ -652,28 +651,75 @@ const saveNoticeEmailTemplate = async () => {
 }
 
 const savePrintTemplate = async () => {
+  const entries = printQrCodes.value.filter(qr => qr.name.trim() || qr.url.trim())
+  if (entries.length > 8 || entries.some(qr => !qr.name.trim() || !isPrintQrUrl(qr.url))) {
+    alert('請為每個 QR code 填寫名稱與有效的 http/https 網址（最多 8 個）。')
+    return
+  }
   isSavingPrintTemplate.value = true
-  const safeHtmlContent = printContentTemplate.value.replace(/\n/g, '<br>')
-  
-  // 💡 儲存文字範本
-  await supabase.from('email_templates').upsert({ 
-    template_id: 'notice_print_template', 
-    subject: '紙本列印範本', 
-    content: safeHtmlContent 
-  })
-  
-  // 💡 同時將設定的 QR Code 網址存入系統設定
-  await supabase.from('system_settings').upsert({ 
-    setting_key: 'print_qr_url', 
-    setting_value: printQrUrl.value 
-  }, { onConflict: 'setting_key' })
-
-  alert('✅ 紙本列印設定 (含 QR 網址) 已成功儲存！')
-  isSavingPrintTemplate.value = false
+  try {
+    const { error: templateError } = await supabase.from('email_templates').upsert({
+      template_id: 'notice_print_template', subject: '紙本列印範本',
+      content: printContentTemplate.value.replace(/\n/g, '<br>')
+    })
+    if (templateError) throw templateError
+    const { error: qrError } = await supabase.from('system_settings').upsert({
+      setting_key: 'print_qr_codes',
+      setting_value: entries.map(qr => ({ name: qr.name.trim(), url: qr.url.trim() }))
+    }, { onConflict: 'setting_key' })
+    if (qrError) throw qrError
+    alert('✅ 紙本列印範本與 QR code 已儲存！')
+  } catch (error) {
+    alert('❌ 紙本設定儲存失敗：' + error.message)
+  } finally { isSavingPrintTemplate.value = false }
 }
 
-const triggerPrint = () => {
-  window.print()
+const triggerPrint = async () => {
+  const entries = printQrCodes.value.filter(qr => qr.name.trim() || qr.url.trim())
+  if (entries.length > 8 || entries.some(qr => !qr.name.trim() || !isPrintQrUrl(qr.url))) {
+    alert('請先填妥每個 QR code 的名稱與有效網址，或移除未完成的項目。')
+    return
+  }
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) { alert('瀏覽器封鎖了列印視窗，請允許此網站開啟新視窗。'); return }
+  isPreparingPrint.value = true
+  try {
+    await generateQrPreview()
+    const qrMarkup = printQrPreview.value.map(qr => `<div class="qr-item"><img src="${qr.image}" alt=""><span>${escapePrintHtml(qr.name)}</span></div>`).join('')
+    const slip = `<section class="slip"><div class="slip-text">${escapePrintHtml(printPreviewText.value)}</div><div class="qr-list">${qrMarkup}</div></section>`
+    printWindow.document.open()
+    printWindow.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>家長須知紙本</title><style>
+      @page { size: A4 portrait; margin: 0; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 209.5mm; height: 296.5mm; font-family: "Microsoft JhengHei", "Noto Sans TC", sans-serif; color: #111; }
+      .sheet { display: flex; width: 209.5mm; height: 296.5mm; overflow: hidden; }
+      .slip { width: 104.75mm; height: 296.5mm; padding: 10mm 7mm; display: flex; flex-direction: column; overflow: hidden; }
+      .slip:first-child { border-right: 1px dashed #888; }
+      .slip-text { flex: 1; min-height: 0; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; font-size: 11pt; line-height: 1.45; }
+      .qr-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3mm; flex: none; margin-top: 4mm; }
+      .qr-list:empty { display: none; }
+      .qr-item { min-width: 0; text-align: center; break-inside: avoid; }
+      .qr-item img { display: block; width: 20mm; height: 20mm; margin: 0 auto; }
+      .qr-item span { display: block; font-size: 8pt; overflow-wrap: anywhere; line-height: 1.2; }
+    </style></head><body><main class="sheet">${slip}${slip}</main></body></html>`)
+    printWindow.document.close()
+    await Promise.all([...printWindow.document.images].map(image => image.decode().catch(() => {})))
+    let fits = true
+    for (const text of printWindow.document.querySelectorAll('.slip-text')) {
+      let size = 11
+      while (text.scrollHeight > text.clientHeight + 2 && size > 7) {
+        size -= 0.5
+        text.style.fontSize = `${size}pt`
+      }
+      if (text.scrollHeight > text.clientHeight + 2 || text.closest('.slip').scrollHeight > text.closest('.slip').clientHeight + 2) fits = false
+    }
+    if (!fits) { printWindow.alert('內容太長，無法在單頁完整顯示。請縮短紙本範本或須知內容後重試。'); return }
+    printWindow.focus()
+    printWindow.print()
+  } catch (error) {
+    printWindow.close()
+    alert('無法產生紙本預覽：' + error.message)
+  } finally { isPreparingPrint.value = false }
 }
 
 const fetchHistory = async () => {
@@ -893,15 +939,11 @@ const importJSON = (event) => {
 .edit-actions-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 15px; border-top: 1px dashed #cbd5e1;}
 .save-btn { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
 
-.print-only-container { display: none; }
-
-@media print {
-  @page { size: A4 portrait; margin: 0; }
-  .print-hide { display: none !important; }
-  .print-only-container { display: flex; flex-wrap: wrap; justify-content: space-between; width: 100%; padding: 15mm; box-sizing: border-box; }
-  .print-slip { width: 48%; border: 1px dashed #94a3b8; padding: 20px; margin-bottom: 15px; box-sizing: border-box; page-break-inside: avoid; }
-  .slip-content { font-family: "微軟正黑體", "Microsoft JhengHei", sans-serif; font-size: 12pt; line-height: 1.6; color: #000; }
-}
+.print-preview-slip { max-width: 450px; min-height: 420px; display: flex; flex-direction: column; background: white; color: #111; }
+.print-preview-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; flex: 1; }
+.print-qr-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.print-qr-item { min-width: 0; text-align: center; overflow-wrap: anywhere; font-size: 0.8rem; }
+.print-qr-item img { display: block; width: 76px; height: 76px; margin: 0 auto 4px; }
 
 @media (max-width: 768px) {
   .admin-board-container { padding-bottom: 20px; }
