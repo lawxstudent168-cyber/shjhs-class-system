@@ -195,7 +195,7 @@
             {{ isSavingPrintTemplate ? '儲存中...' : '💾 存為列印範本' }}
           </button>
         </div>
-        <p class="help-text">以一張 A4 紙輸出左右兩份相同須知單，沿中央裁切。紙本內容會自動隱藏網址；需要提供的連結請在下方加入 QR code。</p>
+        <p class="help-text">以一張 A4 紙輸出左右兩份相同須知單，沿中央裁切。紙本內容中的網址會自動改成下方的 QR code，網址本身不會印出。</p>
         
         <div class="form-group">
           <label>紙本須知單內容：(變數: <span v-pre>{{須知清單}}</span>、<span v-pre>{{今日日期}}</span>)</label>
@@ -203,14 +203,24 @@
         </div>
 
         <div class="form-group">
-          <label style="color:#0284c7;">🔗 附加 QR code（選填，最多 8 個）：</label>
+          <label style="color:#0284c7;">🔗 從今日須知與紙本範本自動找到的網址：</label>
+          <p v-if="!autoPrintQrSources.length" class="hint">目前沒有網址；有網址時會自動產生 QR code。</p>
+          <div v-for="source in autoPrintQrSources" :key="source.url" class="auto-qr-row">
+            <input v-model="printAutoQrNames[source.url]" type="text" class="custom-input" :placeholder="source.suggestedName || '輸入印在 QR code 下方的名稱'" />
+            <span class="auto-qr-url">{{ source.url }}</span>
+          </div>
+          <span class="hint">只需填寫或修改名稱；須知的附加連結也會自動轉換。</span>
+        </div>
+
+        <div class="form-group">
+          <label style="color:#0284c7;">➕ 自行附加其他 QR code（選填，最多 8 個）：</label>
           <div v-for="(qr, index) in printQrCodes" :key="index" class="link-row">
             <input v-model="qr.name" type="text" class="custom-input flex-1" placeholder="QR code 名稱（印在下方）" />
             <input v-model="qr.url" type="url" class="custom-input flex-2" placeholder="https://..." />
             <button type="button" class="del-row-btn" @click="printQrCodes.splice(index, 1)">✖</button>
           </div>
           <button type="button" class="btn-outline-primary" :disabled="printQrCodes.length >= 8" @click="printQrCodes.push({ name: '', url: '' })">➕ 新增 QR code</button>
-          <span class="hint">按「存為列印範本」可暫存文字及 QR code 設定；不會改動網頁或信件內容。</span>
+          <span class="hint">按「存為列印範本」可暫存文字、網址名稱及自行附加的 QR code；不會改動網頁或信件內容。</span>
         </div>
         
         <div class="email-preview-section">
@@ -297,7 +307,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { removePrintUrls, escapePrintHtml, normalizePrintQrCodes, isPrintQrUrl } from '../utils/noticePrint.js'
+import { removePrintUrls, escapePrintHtml, normalizePrintQrCodes, isPrintQrUrl, collectPrintQrSources } from '../utils/noticePrint.js'
 const supabase = useSupabaseClient()
 
 const activeTab = ref('manage')
@@ -325,6 +335,7 @@ const noticeEmailContentTemplate = ref(`各位家長您好，今日班級重要�
 const isSavingPrintTemplate = ref(false)
 const printContentTemplate = ref(`【家長聯絡事項單】\n發布日期：{{今日日期}}\n\n親愛的家長您好，今日班級重要須知如下：\n\n{{須知清單}}\n\n煩請您詳閱並於下方簽名，讓孩子明日繳回，感謝您的配合！\n\n家長簽名：_________________________`)
 const printQrCodes = ref([])
+const printAutoQrNames = ref({})
 const printQrPreview = ref([])
 const isPreparingPrint = ref(false)
 
@@ -368,10 +379,12 @@ const fetchData = async () => {
     printContentTemplate.value = printTmplData.content.replace(/<br\s*\/?>/ig, '\n').replace(/<[^>]+>/g, '') 
   }
 
-  const { data: sysData } = await supabase.from('system_settings').select('*').in('setting_key', ['parent_notices_board_visible', 'print_qr_url', 'print_qr_codes'])
+  const { data: sysData } = await supabase.from('system_settings').select('*').in('setting_key', ['parent_notices_board_visible', 'print_qr_url', 'print_qr_codes', 'print_auto_qr_names'])
   if (sysData && sysData.length > 0) {
     const settings = Object.fromEntries(sysData.map(s => [s.setting_key, s.setting_value]))
     printQrCodes.value = normalizePrintQrCodes(settings.print_qr_codes, settings.print_qr_url)
+    printAutoQrNames.value = settings.print_auto_qr_names && typeof settings.print_auto_qr_names === 'object' && !Array.isArray(settings.print_auto_qr_names)
+      ? settings.print_auto_qr_names : {}
     sysData.forEach(s => {
       if (s.setting_key === 'parent_notices_board_visible') isVisibleOnIndex.value = s.setting_value
     })
@@ -497,10 +510,30 @@ const printPreviewText = computed(() => removePrintUrls(printContentTemplate.val
     .replace(/{{今日日期}}/g, todayDisplay)
     .replace(/{{須知清單}}/g, activeNoticesPrintText.value)))
 
+const autoPrintQrSources = computed(() => collectPrintQrSources(
+  notices.value.filter(n => !n.isHidden && isActiveToday(n.startDate, n.endDate)),
+  printContentTemplate.value
+))
+const allPrintQrEntries = computed(() => {
+  const manualNames = new Map(printQrCodes.value.map(qr => [String(qr.url || '').trim(), String(qr.name || '').trim()]))
+  const entries = autoPrintQrSources.value.map(source => ({
+    url: source.url,
+    name: String(printAutoQrNames.value[source.url] || source.suggestedName || manualNames.get(source.url) || new URL(source.url).hostname).trim()
+  }))
+  const seen = new Set(entries.map(entry => entry.url))
+  for (const qr of printQrCodes.value) {
+    const url = String(qr.url || '').trim()
+    if (!qr.name?.trim() || !isPrintQrUrl(url) || seen.has(url)) continue
+    entries.push({ name: qr.name.trim(), url })
+    seen.add(url)
+  }
+  return entries
+})
+
 let qrPreviewRevision = 0
 const generateQrPreview = async () => {
   const revision = ++qrPreviewRevision
-  const valid = printQrCodes.value.filter(qr => qr.name.trim() && isPrintQrUrl(qr.url))
+  const valid = allPrintQrEntries.value
   if (!valid.length) { printQrPreview.value = []; return }
   const { default: QRCode } = await import('qrcode')
   const generated = await Promise.all(valid.map(async qr => ({
@@ -509,7 +542,7 @@ const generateQrPreview = async () => {
   })))
   if (revision === qrPreviewRevision) printQrPreview.value = generated
 }
-watch(printQrCodes, () => { generateQrPreview().catch(error => console.error('無法產生 QR code', error)) }, { deep: true })
+watch(allPrintQrEntries, () => { generateQrPreview().catch(error => console.error('無法產生 QR code', error)) }, { deep: true })
 
 const editNotice = (notice) => {
   editingNoticeId.value = notice.id
@@ -663,12 +696,15 @@ const savePrintTemplate = async () => {
       content: printContentTemplate.value.replace(/\n/g, '<br>')
     })
     if (templateError) throw templateError
-    const { error: qrError } = await supabase.from('system_settings').upsert({
-      setting_key: 'print_qr_codes',
-      setting_value: entries.map(qr => ({ name: qr.name.trim(), url: qr.url.trim() }))
-    }, { onConflict: 'setting_key' })
+    const names = Object.fromEntries(Object.entries(printAutoQrNames.value)
+      .filter(([, name]) => typeof name === 'string' && name.trim())
+      .map(([url, name]) => [url, name.trim()]))
+    const { error: qrError } = await supabase.from('system_settings').upsert([
+      { setting_key: 'print_qr_codes', setting_value: entries.map(qr => ({ name: qr.name.trim(), url: qr.url.trim() })) },
+      { setting_key: 'print_auto_qr_names', setting_value: names }
+    ], { onConflict: 'setting_key' })
     if (qrError) throw qrError
-    alert('✅ 紙本列印範本與 QR code 已儲存！')
+    alert('✅ 紙本列印範本與 QR code 名稱已儲存！')
   } catch (error) {
     alert('❌ 紙本設定儲存失敗：' + error.message)
   } finally { isSavingPrintTemplate.value = false }
@@ -685,6 +721,9 @@ const triggerPrint = async () => {
   isPreparingPrint.value = true
   try {
     await generateQrPreview()
+    const qrCount = printQrPreview.value.length
+    const qrColumns = qrCount > 12 ? 4 : qrCount > 6 ? 3 : 2
+    const qrSize = qrCount > 12 ? 14 : qrCount > 6 ? 17 : 20
     const qrMarkup = printQrPreview.value.map(qr => `<div class="qr-item"><img src="${qr.image}" alt=""><span>${escapePrintHtml(qr.name)}</span></div>`).join('')
     const slip = `<section class="slip"><div class="slip-text">${escapePrintHtml(printPreviewText.value)}</div><div class="qr-list">${qrMarkup}</div></section>`
     printWindow.document.open()
@@ -696,10 +735,10 @@ const triggerPrint = async () => {
       .slip { width: 104.75mm; height: 296.5mm; padding: 10mm 7mm; display: flex; flex-direction: column; overflow: hidden; }
       .slip:first-child { border-right: 1px dashed #888; }
       .slip-text { flex: 1; min-height: 0; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; font-size: 11pt; line-height: 1.45; }
-      .qr-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3mm; flex: none; margin-top: 4mm; }
+      .qr-list { display: grid; grid-template-columns: repeat(${qrColumns}, minmax(0, 1fr)); gap: 3mm; flex: none; margin-top: 4mm; }
       .qr-list:empty { display: none; }
       .qr-item { min-width: 0; text-align: center; break-inside: avoid; }
-      .qr-item img { display: block; width: 20mm; height: 20mm; margin: 0 auto; }
+      .qr-item img { display: block; width: ${qrSize}mm; height: ${qrSize}mm; margin: 0 auto; }
       .qr-item span { display: block; font-size: 8pt; overflow-wrap: anywhere; line-height: 1.2; }
     </style></head><body><main class="sheet">${slip}${slip}</main></body></html>`)
     printWindow.document.close()
@@ -940,6 +979,9 @@ const importJSON = (event) => {
 .save-btn { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
 
 .print-preview-slip { max-width: 450px; min-height: 420px; display: flex; flex-direction: column; background: white; color: #111; }
+.auto-qr-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.auto-qr-row .custom-input { flex: 1; min-width: 180px; }
+.auto-qr-url { flex: 2; min-width: 210px; overflow-wrap: anywhere; color: #475569; font-size: 0.85rem; }
 .print-preview-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; flex: 1; }
 .print-qr-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
 .print-qr-item { min-width: 0; text-align: center; overflow-wrap: anywhere; font-size: 0.8rem; }
