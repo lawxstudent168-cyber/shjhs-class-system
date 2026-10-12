@@ -1,4 +1,5 @@
 export const examFontSettings = {
+  title: { label: '最上方大考標題', min: 24, max: 100, default: 56 },
   clock: { label: '右側目前時間', min: 48, max: 160, default: 120 },
   subject: { label: '右側目前科目', min: 32, max: 112, default: 88 },
   countdown: { label: '右側倒數時間', min: 48, max: 144, default: 104 },
@@ -86,10 +87,15 @@ export function displayedExamSchedule(value, todayISO = taiwanDateISO()) {
 export function examFontStyles(value) {
   const { fontSizes } = normalizeExamSchedule(value)
   return {
+    '--ex-title-size': `${fontSizes.title}px`,
     '--ex-clock-size': `${fontSizes.clock}px`,
     '--ex-subject-size': `${fontSizes.subject}px`,
     '--ex-countdown-size': `${fontSizes.countdown}px`,
     '--ex-notes-size': `${fontSizes.notes}px`,
+    '--ex-row-clock-size': `${Math.round(fontSizes.clock * 0.52)}px`,
+    '--ex-row-clock-wide-size': `${Math.round(fontSizes.clock * 0.75)}px`,
+    '--ex-row-subject-size': `${Math.round(fontSizes.subject * 0.7)}px`,
+    '--ex-row-countdown-size': `${Math.round(fontSizes.countdown * 0.7)}px`,
     '--ex-next-subject-size': `${Math.round(fontSizes.subject * 0.65)}px`,
     '--ex-next-time-size': `${Math.round(fontSizes.clock * 0.25)}px`
   }

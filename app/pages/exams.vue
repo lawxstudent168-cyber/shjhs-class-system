@@ -72,14 +72,14 @@
         </div>
 
         <div class="font-settings">
-          <h3>🔠 看板右側與考前提醒文字大小</h3>
+          <h3>🔠 看板標題、右側與考前提醒文字大小</h3>
           <div class="font-settings-grid">
             <label v-for="(setting, key) in examFontSettings" :key="key" class="font-setting">
               <span>{{ setting.label }}：{{ examData.fontSizes[key] }} px</span>
               <input v-model.number="examData.fontSizes[key]" type="range" :min="setting.min" :max="setting.max" step="2" />
             </label>
           </div>
-          <p class="setting-desc">拖曳後可在下方看板預覽，按「儲存所有設定」才會更新首頁。</p>
+          <p class="setting-desc">拖曳後可在下方看板預覽；並排顯示時，時間與科目會依右側空間縮小以避免重疊。按「儲存所有設定」才會更新首頁。</p>
         </div>
 
         <div class="left-text-settings">
@@ -231,35 +231,8 @@
               </div>
 
               <div class="exam-right-panel">
-                <div class="clock-label">目前時間 (預覽假定)</div>
-                <div class="exam-clock">{{ mockTime }}:00</div>
-
-                <div class="exam-status-display">
-                  <div v-if="previewStatus.state === 'WAITING'" class="status-text waiting">⏳ 準備中...</div>
-                  <div v-else-if="previewStatus.state === 'FINISHED'" class="status-text finished">🎉 今日全數結束</div>
-                  
-                  <div v-else-if="previewStatus.state === 'TESTING'" class="status-text testing">
-                    <div class="status-label">✏️ 目前進行</div>
-                    <div class="status-subject">{{ previewStatus.current.subject }}</div>
-                    
-                    <div v-if="previewStatus.current.isExam" class="countdown-wrapper">
-                      <div class="countdown-label">距離本節結束還有</div>
-                      <div class="exam-countdown" :class="{ 'text-danger': previewCountdownMinutes < 5 }">
-                        {{ previewCountdownText }}
-                      </div>
-                    </div>
-                    <div v-else class="study-mode-text">📖 溫書自習中</div>
-                  </div>
-                  
-                  <div v-else-if="previewStatus.state === 'BREAK'" class="status-text break">
-                    <div class="status-label">☕ 休息時間</div>
-                    <div class="status-next" v-if="previewStatus.next">
-                      下一節：<span class="highlight">{{ previewStatus.next.subject }}</span> 
-                      <br>
-                      <span class="next-time">({{ previewStatus.next.startTime }} 開始)</span>
-                    </div>
-                  </div>
-                </div>
+                <ExamLiveRow :exam-status="previewStatus" :current-time="`${mockTime}:00`"
+                  :countdown-minutes="previewCountdownMinutes" :countdown-text="previewCountdownText" preview />
 
                 <!-- 💡 新增：大考提醒事項展示區 -->
                 <div class="exam-notes-display" v-if="editedDay.notes.length > 0">
@@ -281,6 +254,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import ExamLiveRow from '~~/components/home/ExamLiveRow.vue'
 import { examFontSettings, examFontStyles, examLeftTextSettings, examLeftTextStyles, normalizeExamSchedule, hasValidExamDates, displayedExamSchedule, taiwanDateISO } from '../utils/examSchedule.js'
 import { examThemes, classicExamThemes, festivalExamThemes } from '../utils/examThemes.js'
 const supabase = useSupabaseClient()
@@ -692,7 +666,7 @@ const saveExamData = async () => {
   align-items: stretch;
   min-height: 800px;
 }
-.exam-main-title { font-size: 3rem; margin: 0 0 40px 0; color: var(--ex-title); letter-spacing: 2px; text-align: center; border-bottom: 2px solid var(--ex-border); padding-bottom: 20px;}
+.exam-main-title { font-size: var(--ex-title-size, 56px); margin: 0 0 24px 0; color: var(--ex-title); letter-spacing: 2px; text-align: center; border-bottom: 2px solid var(--ex-border); padding-bottom: 16px;}
 .exam-split-layout { display: flex; gap: 40px; flex: 1; align-items: flex-start; justify-content: center; }
 
 .exam-left-panel { flex: 1; max-width: 800px; }
@@ -711,27 +685,7 @@ const saveExamData = async () => {
 .font-mono { font-family: monospace; }
 .font-bold { font-weight: bold; letter-spacing: 1px; }
 
-.exam-right-panel { flex: 1; max-width: 700px; background: var(--ex-panel-bg); border-radius: 20px; padding: 40px; text-align: center; border: 1px solid var(--ex-border); box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column; justify-content: flex-start; align-items: center;}
-.clock-label { font-size: 1.5rem; color: var(--ex-text); margin-bottom: 10px; opacity: 0.8;}
-.exam-clock { font-size: var(--ex-clock-size, 120px); font-weight: bold; font-family: monospace; color: var(--ex-clock); margin-bottom: 30px; line-height: 1; }
-
-.exam-status-display { width: 100%; border-top: 1px solid var(--ex-border); padding-top: 30px;}
-.status-text { font-size: 2.5rem; font-weight: bold; }
-.status-text.waiting { color: var(--ex-text); opacity: 0.7;}
-.status-text.finished { color: var(--ex-success); }
-.status-label { font-size: 1.5rem; color: var(--ex-text); margin-bottom: 10px; opacity: 0.8;}
-.status-subject { font-size: var(--ex-subject-size, 88px); color: var(--ex-accent); letter-spacing: 5px; line-height: 1.2; margin: 10px 0 30px 0; overflow-wrap: anywhere;}
-.countdown-wrapper { background: rgba(0,0,0,0.2); padding: 25px; border-radius: 16px; border: 1px solid var(--ex-border);}
-.countdown-label { font-size: 1.5rem; color: var(--ex-text); margin-bottom: 10px; }
-.exam-countdown { font-size: var(--ex-countdown-size, 104px); color: var(--ex-success); font-family: monospace; line-height: 1; }
-.text-danger { color: var(--ex-danger) !important; animation: blink 1s infinite; }
-@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-
-.study-mode-text { font-size: 3rem; color: var(--ex-success); letter-spacing: 2px; margin-top: 20px; padding: 20px; border: 2px dashed var(--ex-success); border-radius: 12px; background: rgba(16, 185, 129, 0.1);}
-
-.status-text.break .status-next { margin-top: 20px; font-size: 2rem; color: var(--ex-text); }
-.status-text.break .highlight { color: var(--ex-success); font-size: var(--ex-next-subject-size, 57px); margin: 15px 0; display: block; overflow-wrap: anywhere;}
-.next-time { font-size: var(--ex-next-time-size, 30px); color: var(--ex-text); font-family: monospace; opacity: 0.8;}
+.exam-right-panel { flex: 1; max-width: 700px; background: var(--ex-panel-bg); border-radius: 20px; padding: 30px; text-align: center; border: 1px solid var(--ex-border); box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column; justify-content: flex-start; align-items: center;}
 
 /* 💡 預覽區提醒事項 CSS */
 .exam-notes-display { margin-top: 30px; background: rgba(255,255,255,0.05); border: 2px dashed var(--ex-border); border-radius: 12px; padding: 20px; text-align: left; width: 100%;}

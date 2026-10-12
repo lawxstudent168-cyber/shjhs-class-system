@@ -30,16 +30,23 @@ test('homepage uses only the manually selected day and its notes', () => {
 })
 
 test('font sizes are saved as bounded numbers and applied to the board', () => {
-  const data = normalizeExamSchedule({ fontSizes: { clock: 90, subject: 60, countdown: 80, notes: 30 } })
+  const data = normalizeExamSchedule({ fontSizes: { title: 72, clock: 90, subject: 60, countdown: 80, notes: 30 } })
   assert.deepEqual(examFontStyles(data), {
+    '--ex-title-size': '72px',
     '--ex-clock-size': '90px',
     '--ex-subject-size': '60px',
     '--ex-countdown-size': '80px',
     '--ex-notes-size': '30px',
+    '--ex-row-clock-size': '47px',
+    '--ex-row-clock-wide-size': '68px',
+    '--ex-row-subject-size': '42px',
+    '--ex-row-countdown-size': '56px',
     '--ex-next-subject-size': '39px',
     '--ex-next-time-size': '23px'
   })
   assert.equal(normalizeExamSchedule({ fontSizes: { clock: 999 } }).fontSizes.clock, 120)
+  assert.equal(normalizeExamSchedule({ fontSizes: { title: 999 } }).fontSizes.title, 56)
+  assert.equal(normalizeExamSchedule({ fontSizes: {} }).fontSizes.title, 56)
 })
 
 test('left table text sizes and colors apply to normal and active rows', () => {
