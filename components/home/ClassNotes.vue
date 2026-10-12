@@ -3,7 +3,7 @@
     <!-- 💡 將原本的 header 改造為可點擊的摺疊開關群組 -->
     <div class="board-header">
       <div class="title-group" @click="toggleExpand" title="點擊展開/收合">
-        <h2 class="board-title notes-title">⚡ 今日班級注意事項</h2>
+        <h2 class="board-title notes-title">⚡ 本週班級注意事項</h2>
         <span class="toggle-icon">{{ isExpanded ? '▲' : '▼' }}</span>
         <p class="board-date">{{ todayDisplay }}</p>
       </div>
@@ -17,17 +17,22 @@
       <div class="board-content">
         
         <div v-if="!isEditingClassNotes">
-          <div v-if="classNoteItems.length === 0" class="empty-text-italic">目前尚無特別注意事項...</div>
+          <div v-if="classNoteItems.length === 0" class="empty-text-italic">未來 7 天尚無班級注意事項...</div>
           <ul v-else class="item-list notes-list">
-            <li v-for="(item, index) in classNoteItems" :key="'cn-'+index">{{ index + 1 }}. {{ privacyFilter(item) }}</li>
+            <li v-for="(item, index) in classNoteItems" :key="'cn-'+index">
+              <span class="note-date">{{ classNoteDateLabel(item.date) }}</span>
+              <span>{{ privacyFilter(item.content) }}</span>
+            </li>
           </ul>
         </div>
         
         <div v-else class="edit-mode">
           <div v-for="(item, index) in editingClassNoteItems" :key="'edit-note-'+index" class="edit-row">
             <span class="row-num">{{ index + 1 }}.</span>
+            <input :value="item.date" :min="currentDate" @input="$emit('update-date', index, $event.target.value)"
+              type="date" class="edit-date" aria-label="事項日期" />
             <input 
-              :value="item" 
+              :value="item.content"
               @input="$emit('update-item', index, $event.target.value)" 
               type="text" 
               placeholder="輸入注意事項..." 
@@ -51,16 +56,18 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import { classNoteDateLabel } from '~~/app/utils/classNotes.js'
 
 const props = defineProps({
   classNoteItems: Array,
   editingClassNoteItems: Array,
   isEditingClassNotes: Boolean,
   todayDisplay: String,
+  currentDate: String,
   privacyFilter: Function
 })
 
-const emit = defineEmits(['open-pwd', 'cancel-edit', 'save-items', 'add-item', 'remove-item', 'update-item'])
+defineEmits(['open-pwd', 'cancel-edit', 'save-items', 'add-item', 'remove-item', 'update-item', 'update-date'])
 
 const isExpanded = ref(false)
 
@@ -69,13 +76,13 @@ const toggleExpand = () => {
 }
 
 // 💡 智慧連動機制：有資料自動展開，沒資料自動縮起
-watch(() => props.classNoteItems, (newVal) => {
-  if (newVal && newVal.length > 0) {
+watch(() => props.classNoteItems?.length, (count) => {
+  if (count > 0) {
     isExpanded.value = true
   } else {
     isExpanded.value = false
   }
-}, { immediate: true, deep: true }) // immediate: true 確保元件剛載入時也會立刻判斷一次
+}, { immediate: true })
 
 // 💡 進入編輯模式時，自動強制展開
 watch(() => props.isEditingClassNotes, (newVal) => {
@@ -137,6 +144,8 @@ watch(() => props.isEditingClassNotes, (newVal) => {
 .board-content { color: white; min-height: 40px; }
 .empty-text-italic { color: #94a3b8; font-style: italic; font-size: 1.1rem; }
 .item-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.notes-list li { display: flex; align-items: baseline; gap: 12px; }
+.note-date { color: #7dd3fc; font-weight: bold; white-space: nowrap; }
 
 .edit-btn { background: #0ea5e9; color: white; border: none; padding: 6px 16px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; transition: 0.2s;}
 .edit-btn:hover { background: #0284c7; }
@@ -145,6 +154,7 @@ watch(() => props.isEditingClassNotes, (newVal) => {
 .edit-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .row-num { font-size: 1.1rem; color: #38bdf8; width: 25px; font-weight: bold; }
 .edit-input { flex: 1; padding: 8px 12px; font-size: 1rem; border-radius: 6px; border: none; }
+.edit-date { width: 165px; padding: 8px; font-size: 1rem; border-radius: 6px; border: none; }
 .del-row-btn { background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
 
 .edit-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
@@ -162,13 +172,14 @@ watch(() => props.isEditingClassNotes, (newVal) => {
   .board-date { font-size: 0.9rem; margin-top: 5px; text-align: center; }
   .edit-btn { width: 100%; padding: 10px; text-align: center; font-size: 1.05rem;}
   
-  .notes-list li { line-height: 1.6; word-break: break-word; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed rgba(255,255,255,0.15); font-size: 1.05rem;}
+  .notes-list li { line-height: 1.6; word-break: break-word; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed rgba(255,255,255,0.15); font-size: 1.05rem; flex-direction: column; gap: 2px;}
   .notes-list li:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0;}
   
   .edit-mode { padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px;}
-  .edit-row { display: flex; align-items: stretch; gap: 8px; flex-wrap: nowrap; margin-bottom: 12px; }
+  .edit-row { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   .row-num { width: 25px; flex-shrink: 0; display: flex; align-items: center; font-size: 1.05rem; }
   .edit-input { flex: 1; min-width: 0; padding: 10px; font-size: 1rem; border-radius: 6px; }
+  .edit-date { width: 100%; box-sizing: border-box; }
   .del-row-btn { flex-shrink: 0; padding: 0 15px; display: flex; align-items: center; justify-content: center; }
   
   .edit-actions { flex-direction: column; align-items: stretch; gap: 15px; margin-top: 15px;}

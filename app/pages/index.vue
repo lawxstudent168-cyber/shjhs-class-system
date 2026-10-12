@@ -112,7 +112,8 @@
               :classNoteItems="classNoteItems"
               :editingClassNoteItems="editingClassNoteItems"
               :isEditingClassNotes="isEditingClassNotes"
-              :todayDisplay="todayDisplay"
+              :todayDisplay="classNotesRangeDisplay"
+              :currentDate="classNotesTodayISO"
               :privacyFilter="privacyFilter"
               @open-pwd="openPwdModal('classNotes')"
               @cancel-edit="isEditingClassNotes = false"
@@ -120,6 +121,7 @@
               @add-item="addClassNoteItem"
               @remove-item="removeClassNoteItem"
               @update-item="updateEditingClassNoteItem"
+              @update-date="updateEditingClassNoteDate"
             />
 
             <ContactBook 
@@ -217,6 +219,8 @@ import HomeWikiFeatured from '~~/components/home/HomeWikiFeatured.vue'
 import HomeEnglishSong from '~~/components/home/HomeEnglishSong.vue'
 import HomeGoodArticle from '~~/components/home/HomeGoodArticle.vue'
 import HomeStudentAssignments from '~~/components/home/HomeStudentAssignments.vue' 
+import { normalizeClassNotes } from '~/utils/classNotes.js'
+import { isValidExamDate, taiwanDateISO } from '~/utils/examSchedule.js'
 
 // 💡 匯入剛剛拆分出來的強大 Composables
 import { useFormatters } from '~/composables/useFormatters'
@@ -267,7 +271,7 @@ const {
   contactBookItems, officerPasswords, isHistoryVisibleOnIndex, globalButtonSettings, roleButtonSettings, clockConfig,
   announcements, parentAnnouncements, isAnnouncementVisibleOnIndex, isParentAnnouncementVisibleOnIndex, isNoticeBoardVisibleOnIndex,
   scheduleData, scheduleButtonConfig, examData, autoRefreshConfig, indexModulesConfig, indexDynamicSorting, isWikiFeaturedVisible,
-  youtubeSchedule, youtubeIsMuted, englishSongSchedule, parentNotices, classNoteItems, seatingChart, hygieneData,
+  youtubeSchedule, youtubeIsMuted, englishSongSchedule, parentNotices, classNoteItems, allClassNoteItems, seatingChart, hygieneData,
   marqueeSettings, unreadMsgCount, assignmentsData, assignmentSubmissionsData, excludedAssignmentIds, goodArticles,
   expectedTeacherPwd, loadTeacherPwd, fetchData
 } = useHomeData(supabase, todayISO, isIpBrownlisted, activeRoleCategory, currentIdentity, allStudents, allStudentsForLogin, todayAttendances, nowTick)
@@ -280,6 +284,8 @@ const { showPwdModal, pwdTarget, pwdModalTitle, pwdModalDesc, currentEditorRole,
 
 // 6. 🕒 考試模式與倒數器
 const { currentThemeStyles, examStatus, countdownMinutes, countdownText } = useExamMode(examData, nowTick)
+const classNotesTodayISO = computed(() => taiwanDateISO(nowTick.value))
+const classNotesRangeDisplay = computed(() => `${classNotesTodayISO.value} 起 7 天`)
 
 // ==============
 // 以下是畫面專屬的 computed 與行為邏輯
@@ -345,7 +351,11 @@ const handlePwdSuccess = async ({ target, role }) => {
   showPwdModal.value = false; currentEditorRole.value = role
   if (target === 'emergency') showEmergencyModal.value = true
   else if (target === 'contact') { isEditingContact.value = true; editingContactItems.value = [...contactBookItems.value] } 
-  else if (target === 'classNotes') { isEditingClassNotes.value = true; editingClassNoteItems.value = [...classNoteItems.value] } 
+  else if (target === 'classNotes') {
+    isEditingClassNotes.value = true
+    const today = taiwanDateISO(nowTick.value)
+    editingClassNoteItems.value = allClassNoteItems.value.filter(item => item.date >= today).map(item => ({ ...item }))
+  }
   else if (target === 'attendance') {
     if (role !== 'teacher' && role !== '導師') return alert('❌ 權限不足：點名板狀態變更僅限導師解鎖！')
     if (pendingAttendanceStudent.value) { await toggleAttendanceLogic(pendingAttendanceStudent.value, true, expectedTeacherPwd.value, true); pendingAttendanceStudent.value = null }
@@ -374,22 +384,29 @@ const saveContactItems = async () => {
 
 const saveClassNoteItems = async () => {
   try {
+    const today = taiwanDateISO(nowTick.value)
+    const invalid = editingClassNoteItems.value.some(item => item.content.trim() && (!isValidExamDate(item.date) || item.date < today))
+    if (invalid) return alert('請為每筆事項選擇今天或未來的有效日期。')
     const { data: currentSettings } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'class_notes_data').maybeSingle()
-    let updatedData = currentSettings?.setting_value || {}
-    updatedData[todayISO] = editingClassNoteItems.value
-    await supabase.from('system_settings').upsert({ setting_key: 'class_notes_data', setting_value: updatedData }, { onConflict: 'setting_key' })
-    await logAudit('修改注意事項', `更新為：${editingClassNoteItems.value.length > 0 ? editingClassNoteItems.value.join('、') : '清空無事項'}`)
+    const past = normalizeClassNotes(currentSettings?.setting_value).filter(item => item.date < today)
+    const upcoming = normalizeClassNotes(editingClassNoteItems.value)
+    const updatedData = normalizeClassNotes([...past, ...upcoming])
+    const { error } = await supabase.from('system_settings').upsert({ setting_key: 'class_notes_data', setting_value: updatedData }, { onConflict: 'setting_key' })
+    if (error) throw error
+    await logAudit('修改注意事項', `更新為：${upcoming.length > 0 ? upcoming.map(item => `${item.date} ${item.content}`).join('、') : '清空無事項'}`)
     alert("✅ 注意事項已成功更新發布！")
-    classNoteItems.value = [...editingClassNoteItems.value]; isEditingClassNotes.value = false
+    allClassNoteItems.value = updatedData
+    isEditingClassNotes.value = false
   } catch (error) { alert("❌ 儲存失敗") }
 }
 
 const addContactItem = () => { editingContactItems.value.push('') }
 const removeContactItem = (idx) => { editingContactItems.value.splice(idx, 1) }
 const updateEditingContactItem = (index, value) => { editingContactItems.value[index] = value }
-const addClassNoteItem = () => { editingClassNoteItems.value.push('') }
+const addClassNoteItem = () => { editingClassNoteItems.value.push({ date: taiwanDateISO(nowTick.value), content: '' }) }
 const removeClassNoteItem = (idx) => { editingClassNoteItems.value.splice(idx, 1) }
-const updateEditingClassNoteItem = (index, value) => { editingClassNoteItems.value[index] = value }
+const updateEditingClassNoteItem = (index, value) => { editingClassNoteItems.value[index].content = value }
+const updateEditingClassNoteDate = (index, value) => { editingClassNoteItems.value[index].date = value }
 
 const currentRefreshInterval = computed(() => {
   if (!isWeekday) return autoRefreshConfig.value.weekend

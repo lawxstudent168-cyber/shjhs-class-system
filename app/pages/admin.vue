@@ -20,7 +20,7 @@
           <button @click="currentTab = 'goodArticles'" :class="{ active: currentTab === 'goodArticles' }">📖 好文分享管理</button>
 
           <button @click="currentTab = 'announcements'" :class="{ active: currentTab === 'announcements' }">📌 班級公佈欄</button>
-          <button @click="currentTab = 'classNotes'" :class="{ active: currentTab === 'classNotes' }">⚡ 今日班級注意事項管理</button>
+          <button @click="currentTab = 'classNotes'" :class="{ active: currentTab === 'classNotes' }">⚡ 本週班級注意事項管理</button>
           <button @click="currentTab = 'contact'" :class="{ active: currentTab === 'contact' }">⭐ 今日聯絡簿管理</button>
 
           <button @click="currentTab = 'messages'" :class="{ active: currentTab === 'messages' }">💬 家長和學生私訊管理</button>

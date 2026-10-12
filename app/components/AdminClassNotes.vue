@@ -1,21 +1,12 @@
 <template>
   <div class="admin-panel">
     <div class="table-header">
-      <h3>⚡ 班級注意事項管理中心</h3>
+      <h3>⚡ 本週班級注意事項管理</h3>
     </div>
 
-    <!-- 💡 日期查詢區塊 -->
-    <div class="query-box">
-      <div class="query-header">
-        <label>📅 選擇管理日期：</label>
-        <input type="date" v-model="targetDate" @change="fetchNotes" class="form-control date-picker" />
-      </div>
-    </div>
-
-    <!-- 💡 編輯與管理區塊 -->
     <div class="editor-section">
       <div class="section-header">
-        <h4 class="section-title">📝 {{ targetDate }} 注意事項編輯</h4>
+        <h4 class="section-title">📝 按日期安排班級事項</h4>
         <div class="io-actions">
           <button @click="exportJSON" class="io-btn export-btn">📤 匯出備份</button>
           <label class="io-btn import-btn">
@@ -25,25 +16,30 @@
         </div>
       </div>
       
-      <p class="help-text">您可以在此處新增、修改或刪除特定日期的班級注意事項。修改後點擊儲存，前台會立即同步更新。</p>
+      <p class="help-text">每筆事項可選日期並輸入內容。首頁只顯示今天起 7 天內的事項；到日期的隔天會自動消失。更遠的未來事項可先儲存排程。</p>
 
       <div v-if="isLoading" class="loading-state">⏳ 載入資料中，請稍候...</div>
       
       <div v-else class="edit-mode">
-        <div v-if="editItems.length === 0" class="empty-state">
-          這天目前沒有任何注意事項喔！
+        <div v-if="!editItems.some(item => item.date >= todayISO)" class="empty-state">
+          目前沒有今天或未來的注意事項。
         </div>
 
-        <div v-for="(item, index) in editItems" :key="'cn-'+index" class="edit-row">
+        <div v-for="(item, index) in editItems" v-show="showPast || item.date >= todayISO" :key="'cn-'+index" class="edit-row">
           <span class="row-num">{{ index + 1 }}.</span>
-          <input v-model="editItems[index]" type="text" placeholder="輸入班級注意事項..." class="edit-input"/>
+          <label class="date-field"><span>事項日期</span><input v-model="item.date" type="date" class="date-picker" /></label>
+          <span class="weekday-hint">{{ classNoteDateLabel(item.date) }}</span>
+          <input v-model="item.content" type="text" placeholder="輸入班級注意事項..." class="edit-input"/>
           <button @click="removeItem(index)" class="del-row-btn">🗑️ 刪除</button>
         </div>
+        <button v-if="editItems.some(item => item.date < todayISO)" type="button" class="history-toggle" @click="showPast = !showPast">
+          {{ showPast ? '收起歷史事項' : '查看及編輯歷史事項' }}
+        </button>
         
         <div class="edit-actions">
           <button @click="addItem" class="add-btn">➕ 新增一筆事項</button>
           <div class="right-actions">
-            <button v-if="editItems.length > 0" @click="clearAll" class="clear-btn">🧹 清空本日</button>
+            <button v-if="editItems.some(item => item.date >= todayISO)" @click="clearUpcoming" class="clear-btn">🧹 清空今天及未來事項</button>
             <button @click="saveItems" class="save-btn" :disabled="isSaving">
               {{ isSaving ? '儲存中...' : '💾 儲存並發布' }}
             </button>
@@ -56,30 +52,25 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { normalizeClassNotes, classNoteDateLabel } from '../utils/classNotes.js'
+import { isValidExamDate, taiwanDateISO } from '../utils/examSchedule.js'
 const supabase = useSupabaseClient()
 
-const d = new Date()
-const todayISO = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+const todayISO = taiwanDateISO()
 
-const targetDate = ref(todayISO)
 const isLoading = ref(false)
 const isSaving = ref(false)
 const editItems = ref([])
-const allNotesData = ref({}) // 存放所有日期的歷史紀錄
+const allNotesData = ref([])
+const showPast = ref(false)
 
 const fetchNotes = async () => {
   isLoading.value = true
   try {
     const { data } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'class_notes_data').maybeSingle()
     
-    allNotesData.value = data?.setting_value || {}
-    
-    // 如果該日期有資料，就載入到編輯陣列中
-    if (allNotesData.value[targetDate.value]) {
-      editItems.value = [...allNotesData.value[targetDate.value]]
-    } else {
-      editItems.value = []
-    }
+    allNotesData.value = normalizeClassNotes(data?.setting_value)
+    editItems.value = allNotesData.value.map(item => ({ ...item }))
   } catch (err) {
     console.error("讀取失敗:", err)
   } finally {
@@ -89,30 +80,31 @@ const fetchNotes = async () => {
 
 onMounted(() => fetchNotes())
 
-const addItem = () => editItems.value.push('')
+const addItem = () => editItems.value.push({ date: todayISO, content: '' })
 const removeItem = (idx) => editItems.value.splice(idx, 1)
 
-const clearAll = () => { 
-  if(confirm('確定要清空這天的所有注意事項嗎？')) {
-    editItems.value = [] 
+const clearUpcoming = () => {
+  if (confirm('確定要清空今天及未來的所有注意事項嗎？歷史事項會保留。')) {
+    editItems.value = editItems.value.filter(item => item.date < todayISO)
   }
 }
 
 const saveItems = async () => {
+  if (editItems.value.some(item => item.content.trim() && !isValidExamDate(item.date))) {
+    alert('請為每筆事項選擇有效日期。')
+    return
+  }
   isSaving.value = true
   try {
-    // 💡 儲存前自動過濾掉完全空白的欄位
-    const cleanedItems = editItems.value.filter(item => String(item).trim() !== '')
-    
-    allNotesData.value[targetDate.value] = cleanedItems
-
-    await supabase.from('system_settings').upsert({
+    const cleanedItems = normalizeClassNotes(editItems.value)
+    const { error } = await supabase.from('system_settings').upsert({
       setting_key: 'class_notes_data',
-      setting_value: allNotesData.value
+      setting_value: cleanedItems
     }, { onConflict: 'setting_key' })
-    
-    editItems.value = [...cleanedItems] // 更新畫面上的陣列
-    alert('✅ 該日期的注意事項已成功儲存發布！')
+    if (error) throw error
+    allNotesData.value = cleanedItems
+    editItems.value = cleanedItems.map(item => ({ ...item }))
+    alert('✅ 班級注意事項已儲存；首頁會依日期自動顯示。')
   } catch (err) {
     alert('❌ 儲存失敗：' + err.message)
   } finally {
@@ -140,22 +132,24 @@ const importJSON = async (event) => {
   reader.onload = async (e) => {
     try {
       const imported = JSON.parse(e.target.result)
-      if (typeof imported !== 'object' || Array.isArray(imported)) {
-        throw new Error("無效的資料格式，必須是日期鍵值的 JSON 物件")
+      const validNew = Array.isArray(imported) && imported.every(item =>
+        item && isValidExamDate(item.date) && typeof item.content === 'string')
+      const validLegacy = imported && typeof imported === 'object' && !Array.isArray(imported) &&
+        Object.entries(imported).every(([date, items]) => isValidExamDate(date) &&
+          Array.isArray(items) && items.every(item => typeof item === 'string'))
+      if (!validNew && !validLegacy) {
+        throw new Error('無效的資料格式；請匯入新版陣列或舊版日期鍵值物件。')
       }
       
       if (confirm('是否要【完全覆蓋】現有所有的注意事項歷史紀錄？\n(按「確定」將覆蓋現有資料庫，請謹慎操作)')) {
-        await supabase.from('system_settings').upsert({ 
+        const normalized = normalizeClassNotes(imported)
+        const { error } = await supabase.from('system_settings').upsert({
           setting_key: 'class_notes_data', 
-          setting_value: imported 
+          setting_value: normalized
         }, { onConflict: 'setting_key' })
-        
-        allNotesData.value = imported
-        if (imported[targetDate.value]) {
-            editItems.value = [...imported[targetDate.value]]
-        } else {
-            editItems.value = []
-        }
+        if (error) throw error
+        allNotesData.value = normalized
+        editItems.value = normalized.map(item => ({ ...item }))
         alert('✅ 匯入成功！系統已同步。')
       }
     } catch(err) { 
@@ -197,8 +191,12 @@ const importJSON = async (event) => {
 .edit-mode { background: #f8fafc; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0;}
 .edit-row { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
 .row-num { font-size: 1.1rem; color: #0ea5e9; width: 30px; font-weight: bold; flex-shrink: 0;}
+.date-field { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; color: #475569; font-size: 0.8rem; }
+.date-field .date-picker { padding: 9px; font-size: 1rem; }
+.weekday-hint { color: #0369a1; white-space: nowrap; font-size: 0.9rem; }
 .edit-input { flex: 1; padding: 12px 15px; font-size: 1.05rem; border-radius: 6px; border: 1px solid #cbd5e1; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);}
 .edit-input:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2); }
+.history-toggle { background: transparent; border: 0; color: #0369a1; cursor: pointer; text-decoration: underline; padding: 8px 0; }
 
 .del-row-btn { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; white-space: nowrap; transition: 0.2s;}
 .del-row-btn:hover { background: #fecaca; }
@@ -230,6 +228,9 @@ const importJSON = async (event) => {
   
   .edit-mode { padding: 15px; }
   .edit-row { flex-wrap: wrap; gap: 8px; margin-bottom: 20px; background: white; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;}
+  .date-field { width: calc(100% - 42px); }
+  .date-field .date-picker { width: 100%; box-sizing: border-box; }
+  .weekday-hint { margin-left: 42px; }
   .edit-input { min-width: 0; width: calc(100% - 40px); margin-bottom: 5px;}
   .del-row-btn { width: 100%; padding: 12px;}
   
