@@ -86,17 +86,33 @@
     <!-- 3. 定時排程 -->
     <div class="card schedule-card">
       <div class="schedule-header">
-        <h4 class="card-title">⏰ 定時廣播排程 (每日循環)</h4>
-        <button @click="addSchedule" class="btn-add">➕ 新增一筆排程</button>
+        <h4 class="card-title">⏰ 定時廣播排程</h4>
+        <button @click="addSchedule" class="btn-add">➕ 新增{{ scheduleTypeLabels[activeScheduleType] }}排程</button>
       </div>
-      <div v-if="schedules.length === 0" class="empty-state">目前沒有任何定時排程。</div>
+      <p class="schedule-help">指定日期排程會在該日期全天取代普通每日排程；每週排程照常執行。日期與星期均以台灣時間計算。</p>
+      <div class="schedule-tabs" role="tablist" aria-label="排程類別">
+        <button v-for="type in scheduleTypes" :key="type" type="button" role="tab"
+          :aria-selected="activeScheduleType === type" :class="{ selected: activeScheduleType === type }"
+          @click="selectScheduleType(type)">{{ scheduleTypeLabels[type] }}（{{ scheduleCounts[type] }}）</button>
+      </div>
+      <div v-if="filteredSchedules.length === 0" class="empty-state">此類別目前沒有排程。</div>
       <div v-else class="schedule-list">
-        <div v-for="(sch, index) in schedules" :key="index" class="schedule-item" :class="{'is-disabled': !sch.isActive}">
+        <div v-for="{ sch, index } in pagedSchedules" :key="index" class="schedule-item" :class="{'is-disabled': !sch.isActive}">
           <div class="sch-row top-row">
-            <input type="checkbox" v-model="sch.isActive" class="toggle-chk" title="啟用/停用" />
+            <label class="active-label"><input type="checkbox" v-model="sch.isActive" class="toggle-chk" />啟用</label>
             <input type="time" v-model="sch.time" class="time-input" required />
             <input type="text" v-model="sch.text" class="custom-input text-input" placeholder="排程廣播文字..." />
             <button @click="removeSchedule(index)" class="btn-del" title="刪除此排程">🗑️</button>
+          </div>
+          <div v-if="activeScheduleType === 'weekly'" class="schedule-days">
+            <span>每週：</span>
+            <label v-for="day in weekdayOptions" :key="day.value"><input type="checkbox" :checked="sch.weekdays.includes(day.value)" @change="toggleWeekday(sch, day.value)" />{{ day.label }}</label>
+          </div>
+          <div v-if="activeScheduleType === 'special'" class="schedule-dates">
+            <label>用途：<input type="text" v-model="sch.name" class="custom-input schedule-name" placeholder="例如：月考、校外教學" /></label>
+            <label>指定日期：<input type="date" class="date-input" @change="addSpecialDate(sch, $event)" /></label>
+            <span v-for="date in sch.dates" :key="date" class="date-chip">{{ date }} <button type="button" :aria-label="`移除 ${date}`" @click="removeSpecialDate(sch, date)">×</button></span>
+            <span v-if="!sch.dates.length" class="schedule-hint">請選擇至少一個日期，可逐日加入。</span>
           </div>
           <div class="sch-row bottom-row">
             <div class="mini-group">
@@ -125,6 +141,11 @@
             </div>
           </div>
         </div>
+      </div>
+      <div v-if="filteredSchedules.length > pageSize" class="schedule-pagination">
+        <button type="button" :disabled="schedulePage === 1" @click="schedulePage--">上一頁</button>
+        <span>第 {{ schedulePage }}／{{ schedulePageCount }} 頁，共 {{ filteredSchedules.length }} 筆</span>
+        <button type="button" :disabled="schedulePage === schedulePageCount" @click="schedulePage++">下一頁</button>
       </div>
       <div class="save-row">
         <button @click="saveSettingsToDB" class="btn-save-all" :disabled="isSavingSch">
@@ -178,7 +199,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { normalizeBroadcastSchedule, scheduleType } from '../utils/broadcastSchedule.mjs'
 const supabase = useSupabaseClient()
 
 const soundOptions = [
@@ -223,6 +245,25 @@ const currentIP = ref('檢查中...'); const isCurrentDeviceClassroom = ref(fals
 
 const manualConfig = ref({ text: '', sound: 'bell_ring', playCount: 1, textPlayCount: 1, displayDuration: 120, targetIP: '', triggerTimestamp: 0 })
 const schedules = ref([]); const presets = ref([]); const savedIPs = ref([]); const newIPInput = ref('')
+const scheduleTypes = ['daily', 'weekly', 'special']
+const scheduleTypeLabels = { daily: '普通每日', weekly: '每週', special: '指定日期每日' }
+const weekdayOptions = [
+  { value: 1, label: '週一' }, { value: 2, label: '週二' }, { value: 3, label: '週三' },
+  { value: 4, label: '週四' }, { value: 5, label: '週五' }, { value: 6, label: '週六' }, { value: 0, label: '週日' }
+]
+const activeScheduleType = ref('daily')
+const schedulePage = ref(1)
+const pageSize = 8
+const scheduleCounts = computed(() => Object.fromEntries(scheduleTypes.map(type => [type, schedules.value.filter(sch => scheduleType(sch) === type).length])))
+const filteredSchedules = computed(() => schedules.value.map((sch, index) => ({ sch, index }))
+  .filter(({ sch }) => scheduleType(sch) === activeScheduleType.value)
+  .sort((a, b) => {
+    const dateOrder = activeScheduleType.value === 'special' ? (a.sch.dates[0] || '9999-12-31').localeCompare(b.sch.dates[0] || '9999-12-31') : 0
+    return dateOrder || (a.sch.time || '').localeCompare(b.sch.time || '') || a.index - b.index
+  }))
+const schedulePageCount = computed(() => Math.max(1, Math.ceil(filteredSchedules.value.length / pageSize)))
+const pagedSchedules = computed(() => filteredSchedules.value.slice((schedulePage.value - 1) * pageSize, schedulePage.value * pageSize))
+const selectScheduleType = (type) => { activeScheduleType.value = type; schedulePage.value = 1 }
 const broadcastLogs = ref([]) // 💡 存放歷史紀錄
 
 const fileInput = ref(null)
@@ -233,7 +274,7 @@ const formatUA = (ua) => { if (!ua) return '未知'; if (ua.includes('Chrome')) 
 const fetchSettingsAndCheckIP = async () => {
   const { data: bData } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'broadcast_settings').maybeSingle()
   if (bData && bData.setting_value) {
-    if (bData.setting_value.schedules) schedules.value = bData.setting_value.schedules
+    if (Array.isArray(bData.setting_value.schedules)) schedules.value = bData.setting_value.schedules.map(normalizeBroadcastSchedule)
     if (bData.setting_value.presets) presets.value = bData.setting_value.presets
     if (bData.setting_value.savedIPs) savedIPs.value = bData.setting_value.savedIPs
   }
@@ -369,6 +410,8 @@ const testSoundAndTTS = async () => {
 }
 
 const saveSettingsToDB = async (showAlert = true) => {
+  if (showAlert && schedules.value.some(sch => sch.isActive && scheduleType(sch) === 'weekly' && !sch.weekdays.length)) return alert('⚠️ 啟用的每週排程至少要選擇一天。')
+  if (showAlert && schedules.value.some(sch => sch.isActive && scheduleType(sch) === 'special' && !sch.dates.length)) return alert('⚠️ 啟用的指定日期排程至少要選擇一個日期。')
   isSavingSch.value = true
   const newSettings = { manual: manualConfig.value, schedules: schedules.value, presets: presets.value, savedIPs: savedIPs.value }
   const { error } = await supabase.from('system_settings').upsert({ setting_key: 'broadcast_settings', setting_value: newSettings }, { onConflict: 'setting_key' })
@@ -386,8 +429,31 @@ const sendManualBroadcast = async () => {
   isSending.value = false
 }
 
-const addSchedule = () => { schedules.value.push({ isActive: true, time: '08:00', text: '早自修時間開始', sound: 'bell_ring', playCount: 1, textPlayCount: 1, displayDuration: 120, targetIP: '' }) }
-const removeSchedule = (index) => { if (confirm('確定要刪除這筆排程嗎？')) schedules.value.splice(index, 1) }
+const addSchedule = () => {
+  const index = schedules.value.push({ isActive: true, repeatType: activeScheduleType.value, name: '', weekdays: [], dates: [], time: '08:00', text: '', sound: 'bell_ring', playCount: 1, textPlayCount: 1, displayDuration: 120, targetIP: '' }) - 1
+  schedulePage.value = Math.ceil((filteredSchedules.value.findIndex(item => item.index === index) + 1) / pageSize)
+}
+const removeSchedule = (index) => {
+  if (confirm('確定要刪除這筆排程嗎？')) {
+    schedules.value.splice(index, 1)
+    schedulePage.value = Math.min(schedulePage.value, schedulePageCount.value)
+  }
+}
+const toggleWeekday = (sch, day) => {
+  sch.weekdays = sch.weekdays.includes(day) ? sch.weekdays.filter(value => value !== day) : [...sch.weekdays, day]
+}
+const addSpecialDate = (sch, event) => {
+  const date = event.target.value
+  if (date && !sch.dates.includes(date)) {
+    sch.dates = [...sch.dates, date].sort()
+    schedulePage.value = Math.ceil((filteredSchedules.value.findIndex(item => item.sch === sch) + 1) / pageSize)
+  }
+  event.target.value = ''
+}
+const removeSpecialDate = (sch, date) => {
+  sch.dates = sch.dates.filter(value => value !== date)
+  schedulePage.value = Math.ceil((filteredSchedules.value.findIndex(item => item.sch === sch) + 1) / pageSize)
+}
 
 </script>
 
@@ -447,6 +513,20 @@ const removeSchedule = (index) => { if (confirm('確定要刪除這筆排程嗎�
 .btn-send:disabled, .btn-test:disabled { filter: grayscale(50%); opacity: 0.7; cursor: not-allowed; transform: none; box-shadow: none; }
 
 .schedule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 10px; }
+.schedule-help { margin: 0 0 12px; color: #475569; font-size: 0.9rem; line-height: 1.5; }
+.schedule-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.schedule-tabs button, .schedule-pagination button { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; color: #334155; cursor: pointer; }
+.schedule-tabs button.selected { background: #dbeafe; border-color: #3b82f6; color: #1d4ed8; font-weight: bold; }
+.schedule-days, .schedule-dates { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; color: #334155; }
+.schedule-days label, .schedule-dates label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.date-input { padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.date-chip { display: inline-flex; gap: 5px; align-items: center; padding: 5px 8px; border-radius: 14px; background: #dbeafe; color: #1e40af; }
+.date-chip button { border: 0; background: transparent; color: #1e40af; cursor: pointer; font-size: 1.1rem; }
+.schedule-hint { color: #b45309; font-size: 0.85rem; }
+.schedule-name { width: 180px; max-width: 100%; }
+.schedule-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 18px; }
+.schedule-pagination button:disabled { opacity: .5; cursor: not-allowed; }
+.active-label { display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; }
 .btn-add { background: #10b981; color: white; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; }
 .btn-add:hover { background: #059669; }
 

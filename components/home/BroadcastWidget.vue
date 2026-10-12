@@ -26,6 +26,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { dueBroadcastSchedules, taiwanBroadcastClock } from '../../app/utils/broadcastSchedule.mjs'
 const supabase = useSupabaseClient()
 
 const props = defineProps({
@@ -37,6 +38,7 @@ let pollingInterval = null
 let scheduleInterval = null
 let hideTimeout = null 
 const lastTriggeredScheduleTime = ref('')
+let checkingScheduleMinute = ''
 const myIp = ref('')
 const deviceName = ref('')
 
@@ -243,12 +245,12 @@ const pollManualBroadcast = async () => {
 const checkSchedules = async () => {
   if (!props.isIpBrownlisted) return; 
 
-  const now = new Date()
-  const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-  const currentSec = now.getSeconds()
+  const clock = taiwanBroadcastClock()
+  const minuteKey = `${clock.date} ${clock.time}`
 
-  if (currentSec > 15 || lastTriggeredScheduleTime.value === currentHHMM) return
+  if (clock.second > 15 || lastTriggeredScheduleTime.value === minuteKey || checkingScheduleMinute === minuteKey) return
 
+  checkingScheduleMinute = minuteKey
   try {
     const keys = ['broadcast_settings', 'teacher_broadcast_settings']
     const { data } = await supabase.from('system_settings').select('setting_value').in('setting_key', keys)
@@ -262,18 +264,15 @@ const checkSchedules = async () => {
       })
     }
 
-    if (combinedSchedules.length > 0) {
-      const activeSchedules = combinedSchedules.filter(s => s.isActive)
-      for (const schedule of activeSchedules) {
-        if (schedule.time === currentHHMM && shouldProcessBroadcast(schedule.targetIP)) {
-          lastTriggeredScheduleTime.value = currentHHMM
-          triggerBroadcast(schedule)
-          logScheduledBroadcast(schedule.text, schedule.sound, schedule.targetIP)
-          break 
-        }
+    const dueSchedules = dueBroadcastSchedules(combinedSchedules, clock, shouldProcessBroadcast)
+    if (dueSchedules.length > 0) {
+      lastTriggeredScheduleTime.value = minuteKey
+      for (const schedule of dueSchedules) {
+        await triggerBroadcast(schedule)
+        logScheduledBroadcast(schedule.text, schedule.sound, schedule.targetIP)
       }
     }
-  } catch (e) {}
+  } catch (e) {} finally { checkingScheduleMinute = '' }
 }
 
 onMounted(() => {
