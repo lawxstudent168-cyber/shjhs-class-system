@@ -89,7 +89,7 @@
         <h4 class="card-title">⏰ 定時廣播排程</h4>
         <button @click="addSchedule" class="btn-add">➕ 新增{{ scheduleTypeLabels[activeScheduleType] }}排程</button>
       </div>
-      <p class="schedule-help">指定日期排程會在該日期全天取代普通每日排程；每週排程照常執行。日期與星期均以台灣時間計算。</p>
+      <p class="schedule-help">指定日期排程會在該日期全天取代普通每日排程；每週排程照常執行。日期與星期均以台灣時間計算。修改時間或日期後，儲存成功才會重新排列。</p>
       <div class="schedule-tabs" role="tablist" aria-label="排程類別">
         <button v-for="type in scheduleTypes" :key="type" type="button" role="tab"
           :aria-selected="activeScheduleType === type" :class="{ selected: activeScheduleType === type }"
@@ -148,7 +148,7 @@
         <button type="button" :disabled="schedulePage === schedulePageCount" @click="schedulePage++">下一頁</button>
       </div>
       <div class="save-row">
-        <button @click="saveSettingsToDB" class="btn-save-all" :disabled="isSavingSch">
+        <button @click="saveSettingsToDB()" class="btn-save-all" :disabled="isSavingSch">
           {{ isSavingSch ? '儲存中...' : '💾 儲存所有排程與罐頭設定' }}
         </button>
       </div>
@@ -254,12 +254,16 @@ const weekdayOptions = [
 const activeScheduleType = ref('daily')
 const schedulePage = ref(1)
 const pageSize = 8
+const scheduleSortKeys = ref([])
+const sortKeyFor = (sch) => ({ date: sch.dates?.[0] || '9999-12-31', time: sch.time || '' })
 const scheduleCounts = computed(() => Object.fromEntries(scheduleTypes.map(type => [type, schedules.value.filter(sch => scheduleType(sch) === type).length])))
 const filteredSchedules = computed(() => schedules.value.map((sch, index) => ({ sch, index }))
   .filter(({ sch }) => scheduleType(sch) === activeScheduleType.value)
   .sort((a, b) => {
-    const dateOrder = activeScheduleType.value === 'special' ? (a.sch.dates[0] || '9999-12-31').localeCompare(b.sch.dates[0] || '9999-12-31') : 0
-    return dateOrder || (a.sch.time || '').localeCompare(b.sch.time || '') || a.index - b.index
+    const aKey = scheduleSortKeys.value[a.index] || sortKeyFor(a.sch)
+    const bKey = scheduleSortKeys.value[b.index] || sortKeyFor(b.sch)
+    const dateOrder = activeScheduleType.value === 'special' ? aKey.date.localeCompare(bKey.date) : 0
+    return dateOrder || aKey.time.localeCompare(bKey.time) || a.index - b.index
   }))
 const schedulePageCount = computed(() => Math.max(1, Math.ceil(filteredSchedules.value.length / pageSize)))
 const pagedSchedules = computed(() => filteredSchedules.value.slice((schedulePage.value - 1) * pageSize, schedulePage.value * pageSize))
@@ -274,7 +278,10 @@ const formatUA = (ua) => { if (!ua) return '未知'; if (ua.includes('Chrome')) 
 const fetchSettingsAndCheckIP = async () => {
   const { data: bData } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'broadcast_settings').maybeSingle()
   if (bData && bData.setting_value) {
-    if (Array.isArray(bData.setting_value.schedules)) schedules.value = bData.setting_value.schedules.map(normalizeBroadcastSchedule)
+    if (Array.isArray(bData.setting_value.schedules)) {
+      schedules.value = bData.setting_value.schedules.map(normalizeBroadcastSchedule)
+      scheduleSortKeys.value = schedules.value.map(sortKeyFor)
+    }
     if (bData.setting_value.presets) presets.value = bData.setting_value.presets
     if (bData.setting_value.savedIPs) savedIPs.value = bData.setting_value.savedIPs
   }
@@ -415,6 +422,7 @@ const saveSettingsToDB = async (showAlert = true) => {
   isSavingSch.value = true
   const newSettings = { manual: manualConfig.value, schedules: schedules.value, presets: presets.value, savedIPs: savedIPs.value }
   const { error } = await supabase.from('system_settings').upsert({ setting_key: 'broadcast_settings', setting_value: newSettings }, { onConflict: 'setting_key' })
+  if (!error && showAlert) scheduleSortKeys.value = schedules.value.map(sortKeyFor)
   if (showAlert) { if (!error) alert('✅ 設定已成功儲存！'); else alert('❌ 儲存失敗') }
   isSavingSch.value = false
 }
@@ -431,11 +439,13 @@ const sendManualBroadcast = async () => {
 
 const addSchedule = () => {
   const index = schedules.value.push({ isActive: true, repeatType: activeScheduleType.value, name: '', weekdays: [], dates: [], time: '08:00', text: '', sound: 'bell_ring', playCount: 1, textPlayCount: 1, displayDuration: 120, targetIP: '' }) - 1
+  scheduleSortKeys.value.push(sortKeyFor(schedules.value[index]))
   schedulePage.value = Math.ceil((filteredSchedules.value.findIndex(item => item.index === index) + 1) / pageSize)
 }
 const removeSchedule = (index) => {
   if (confirm('確定要刪除這筆排程嗎？')) {
     schedules.value.splice(index, 1)
+    scheduleSortKeys.value.splice(index, 1)
     schedulePage.value = Math.min(schedulePage.value, schedulePageCount.value)
   }
 }
