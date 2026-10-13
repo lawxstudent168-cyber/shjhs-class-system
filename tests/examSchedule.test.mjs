@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { displayedExamSchedule, examFontStyles, examLeftTextStyles, hasValidExamDates, normalizeExamSchedule, taiwanDateISO } from '../app/utils/examSchedule.js'
+import { displayedExamSchedule, examFontStyles, examLeftTextStyles, examRemainingSeconds, examStatusAt, hasValidExamDates, normalizeExamSchedule, taiwanClockHHMMSS, taiwanDateISO } from '../app/utils/examSchedule.js'
 import { classicExamThemes, examThemes, festivalExamThemes } from '../app/utils/examThemes.js'
 
 test('existing one-day exam data remains on day one after migration', () => {
@@ -37,6 +37,9 @@ test('font sizes are saved as bounded numbers and applied to the board', () => {
     '--ex-subject-size': '60px',
     '--ex-countdown-size': '80px',
     '--ex-notes-size': '30px',
+    '--ex-attendance-size': '14px',
+    '--ex-focus-label-size': '24px',
+    '--ex-seat-number-size': '20px',
     '--ex-row-clock-size': '47px',
     '--ex-row-clock-wide-size': '68px',
     '--ex-row-subject-size': '42px',
@@ -47,6 +50,23 @@ test('font sizes are saved as bounded numbers and applied to the board', () => {
   assert.equal(normalizeExamSchedule({ fontSizes: { clock: 999 } }).fontSizes.clock, 120)
   assert.equal(normalizeExamSchedule({ fontSizes: { title: 999 } }).fontSizes.title, 56)
   assert.equal(normalizeExamSchedule({ fontSizes: {} }).fontSizes.title, 56)
+})
+
+test('only checked exam periods use the focused layout and exact end returns to overview', () => {
+  const periods = [
+    { subject: '溫書', startTime: '07:30', endTime: '08:00', isExam: false },
+    { subject: '國文', startTime: '08:00', endTime: '09:05', isExam: true },
+    { subject: '休息', startTime: '09:15', endTime: '09:30', isExam: false }
+  ]
+  assert.equal(examStatusAt(periods, '07:45').current.isExam, false)
+  assert.equal(examStatusAt(periods, '08:00').current.subject, '國文')
+  assert.equal(examStatusAt(periods, '09:04').current.subject, '國文')
+  assert.equal(examStatusAt(periods, '09:05').state, 'BREAK')
+  assert.equal(examStatusAt(periods, '09:15').current.isExam, false)
+  assert.equal(examStatusAt(periods, '09:30').state, 'FINISHED')
+  assert.equal(examRemainingSeconds('09:05', '09:04:59'), 1)
+  assert.equal(examRemainingSeconds('09:05', '09:05:00'), 0)
+  assert.equal(taiwanClockHHMMSS(Date.UTC(2026, 9, 12, 16, 0, 1)), '00:00:01')
 })
 
 test('left table text sizes and colors apply to normal and active rows', () => {

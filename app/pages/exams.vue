@@ -205,47 +205,13 @@
         </div>
 
         <div class="preview-scale-container">
-          <div class="exam-dashboard-preview" :style="currentThemeStyles">
-            <h1 class="exam-main-title">{{ editedDay.title || '尚未設定標題' }}</h1>
-            
-            <div class="exam-split-layout">
-              <div class="exam-left-panel">
-                <table class="exam-table">
-                  <thead>
-                    <tr>
-                      <th width="80">節次</th>
-                      <th>考科</th>
-                      <th>開始</th>
-                      <th>結束</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(p, i) in previewStatus.periods" :key="i" :class="{ 'active-row': p.isActive }">
-                      <td class="exam-cell-period">第 {{ i + 1 }} 節</td>
-                      <td class="exam-cell-subject font-bold">{{ p.subject }}</td>
-                      <td class="exam-cell-time font-mono">{{ p.startTime }}</td>
-                      <td class="exam-cell-time font-mono">{{ p.endTime }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="exam-right-panel">
-                <ExamLiveRow :exam-status="previewStatus" :current-time="`${mockTime}:00`"
-                  :countdown-minutes="previewCountdownMinutes" :countdown-text="previewCountdownText" preview />
-
-                <!-- 💡 新增：大考提醒事項展示區 -->
-                <div class="exam-notes-display" v-if="editedDay.notes.length > 0">
-                  <h4 class="notes-title">⚠️ 考前提醒</h4>
-                  <ul class="notes-list-preview">
-                    <li v-for="(note, idx) in editedDay.notes" :key="'p-note-'+idx">{{ note }}</li>
-                  </ul>
-                </div>
-
-              </div>
-            </div>
-          </div>
+          <ExamDashboard :exam-data="previewExamData" :exam-status="previewStatus"
+            :current-time="`${mockTime}:00`" :countdown-minutes="previewCountdownMinutes"
+            :countdown-text="previewCountdownText" :current-theme-styles="currentThemeStyles"
+            :all-students="previewStudents" :today-attendances="previewAttendances"
+            :seating-chart="previewSeatingChart" preview />
         </div>
+        <p class="mock-desc">出缺席採用今天的實際資料；座位表依預覽日期選取。</p>
       </div>
 
     </div>
@@ -254,9 +220,10 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import ExamLiveRow from '~~/components/home/ExamLiveRow.vue'
-import { examFontSettings, examFontStyles, examLeftTextSettings, examLeftTextStyles, normalizeExamSchedule, hasValidExamDates, displayedExamSchedule, taiwanDateISO } from '../utils/examSchedule.js'
+import ExamDashboard from '~~/components/home/ExamDashboard.vue'
+import { examFontSettings, examFontStyles, examLeftTextSettings, examLeftTextStyles, normalizeExamSchedule, hasValidExamDates, displayedExamSchedule, taiwanDateISO, isValidExamDate, examStatusAt, examRemainingSeconds } from '../utils/examSchedule.js'
 import { examThemes, classicExamThemes, festivalExamThemes } from '../utils/examThemes.js'
+import { resolveSeatingLayout } from '../utils/seatingSchedule.js'
 const supabase = useSupabaseClient()
 
 const isLoggedIn = ref(false)
@@ -267,6 +234,9 @@ const isSaving = ref(false)
 const mockTime = ref('08:30')
 const editingDay = ref(1)
 const previewNow = ref(Date.now())
+const previewStudents = ref([])
+const previewAttendances = ref([])
+const previewSeatingData = ref(null)
 let previewTimer
 const themeGroups = [
   { name: '原有主題', themes: classicExamThemes },
@@ -298,6 +268,9 @@ const defaultExamData = {
 
 const examData = ref(normalizeExamSchedule(defaultExamData))
 const editedDay = computed(() => examData.value.days[editingDay.value - 1])
+const previewExamData = computed(() => ({ ...examData.value, title: editedDay.value.title || '尚未設定標題', periods: editedDay.value.periods, notes: editedDay.value.notes }))
+const previewSeatingChart = computed(() => resolveSeatingLayout(previewSeatingData.value,
+  isValidExamDate(editedDay.value.date) ? editedDay.value.date : taiwanDateISO(previewNow.value)))
 const previewHomepageDay = computed(() => displayedExamSchedule(examData.value, taiwanDateISO(previewNow.value)).selectedDay)
 const leftTextColor = key => examData.value.leftTextColors[key] ||
   (key === 'header' ? (examThemes[examData.value.theme] || examThemes.midnight).title :
@@ -320,64 +293,11 @@ const currentThemeStyles = computed(() => {
   }
 })
 
-const previewStatus = computed(() => {
-  if (!editedDay.value.periods.length) return { state: 'WAITING', periods: [] }
-
-  if (!mockTime.value) return { state: 'WAITING', periods: [] }
-  
-  const [mh, mm] = mockTime.value.split(':').map(Number)
-  const mockMins = mh * 60 + mm
-
-  let current = null
-  let next = null
-  let state = 'WAITING'
-
-  const periods = JSON.parse(JSON.stringify(editedDay.value.periods))
-
-  for (let i = 0; i < periods.length; i++) {
-    const p = periods[i]
-    if (!p.startTime || !p.endTime) continue
-    
-    const [sh, sm] = p.startTime.split(':').map(Number)
-    const [eh, em] = p.endTime.split(':').map(Number)
-    const startMins = sh * 60 + sm
-    const endMins = eh * 60 + em
-
-    p.isActive = false
-
-    if (mockMins >= startMins && mockMins <= endMins) {
-      state = 'TESTING'
-      current = p
-      p.isActive = true
-      if (i + 1 < periods.length) next = periods[i + 1]
-      break
-    }
-
-    if (mockMins < startMins) {
-      if (state !== 'TESTING') {
-        state = i === 0 ? 'WAITING' : 'BREAK'
-        next = p
-      }
-      break
-    }
-  }
-
-  const lastP = periods[periods.length - 1]
-  if (lastP && lastP.endTime) {
-    const [lsh, lsm] = lastP.endTime.split(':').map(Number)
-    if (!current && !next && mockMins >= (lsh * 60 + lsm)) {
-       state = 'FINISHED'
-    }
-  }
-
-  return { state, current, next, periods }
-})
+const previewStatus = computed(() => examStatusAt(editedDay.value.periods, mockTime.value))
 
 const previewCountdownMinutes = computed(() => {
   if (previewStatus.value.state !== 'TESTING' || !previewStatus.value.current) return 999
-  const [mh, mm] = mockTime.value.split(':').map(Number)
-  const [eh, em] = previewStatus.value.current.endTime.split(':').map(Number)
-  return (eh * 60 + em) - (mh * 60 + mm)
+  return Math.floor(examRemainingSeconds(previewStatus.value.current.endTime, `${mockTime.value}:00`) / 60)
 })
 
 const previewCountdownText = computed(() => {
@@ -424,12 +344,20 @@ const handleLogin = async () => {
 const logout = () => { sessionStorage.removeItem('exams_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
 
 const fetchExamData = async () => {
-  const { data } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'exam_schedule_data').maybeSingle()
+  const [{ data }, { data: students }, { data: attendances }, { data: seating }] = await Promise.all([
+    supabase.from('system_settings').select('setting_value').eq('setting_key', 'exam_schedule_data').maybeSingle(),
+    supabase.from('students').select('*').order('seat_number'),
+    supabase.from('attendances').select('*').eq('record_date', taiwanDateISO()),
+    supabase.from('system_settings').select('setting_value').eq('setting_key', 'seating_chart_data').maybeSingle()
+  ])
   if (data?.setting_value) {
     examData.value = normalizeExamSchedule(data.setting_value)
   } else {
     examData.value = normalizeExamSchedule(defaultExamData)
   }
+  previewStudents.value = (students || []).filter(student => !student.hide_attendance)
+  previewAttendances.value = attendances || []
+  previewSeatingData.value = seating?.setting_value || null
 }
 
 const addPeriod = () => {
@@ -657,39 +585,4 @@ const saveExamData = async () => {
   border: 4px solid #475569;
 }
 
-.exam-dashboard-preview { 
-  background-color: var(--ex-bg); 
-  color: var(--ex-text); 
-  padding: 40px; 
-  display: flex; 
-  flex-direction: column; 
-  align-items: stretch;
-  min-height: 800px;
-}
-.exam-main-title { font-size: var(--ex-title-size, 56px); margin: 0 0 24px 0; color: var(--ex-title); letter-spacing: 2px; text-align: center; border-bottom: 2px solid var(--ex-border); padding-bottom: 16px;}
-.exam-split-layout { display: flex; gap: 40px; flex: 1; align-items: flex-start; justify-content: center; }
-
-.exam-left-panel { flex: 1; max-width: 800px; }
-.exam-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 1.6rem; background: var(--ex-panel-bg); border-radius: 16px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2);}
-.exam-table th, .exam-table td { padding: 22px; text-align: center; border-bottom: 1px solid var(--ex-border); }
-.exam-table th { background: var(--ex-border); color: var(--ex-left-header-color, var(--ex-title)); font-weight: normal; font-size: var(--ex-left-header-size, 22px); }
-.exam-table tr:last-child td { border-bottom: none; }
-.active-row { background: rgba(255,255,255,0.1); border-left: 5px solid var(--ex-accent);}
-.active-row td { font-weight: bold; border-bottom-color: transparent;}
-.exam-cell-period { font-size: var(--ex-left-period-size, 29px); color: var(--ex-left-period-color, var(--ex-text)); }
-.exam-cell-subject { font-size: var(--ex-left-subject-size, 29px); color: var(--ex-left-subject-color, var(--ex-text)); }
-.exam-cell-time { font-size: var(--ex-left-time-size, 29px); color: var(--ex-left-time-color, var(--ex-text)); }
-.active-row .exam-cell-period { color: var(--ex-left-period-active-color, var(--ex-accent)); }
-.active-row .exam-cell-subject { color: var(--ex-left-subject-active-color, var(--ex-accent)); }
-.active-row .exam-cell-time { color: var(--ex-left-time-active-color, var(--ex-accent)); }
-.font-mono { font-family: monospace; }
-.font-bold { font-weight: bold; letter-spacing: 1px; }
-
-.exam-right-panel { flex: 1; max-width: 700px; background: var(--ex-panel-bg); border-radius: 20px; padding: 30px; text-align: center; border: 1px solid var(--ex-border); box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column; justify-content: flex-start; align-items: center;}
-
-/* 💡 預覽區提醒事項 CSS */
-.exam-notes-display { margin-top: 30px; background: rgba(255,255,255,0.05); border: 2px dashed var(--ex-border); border-radius: 12px; padding: 20px; text-align: left; width: 100%;}
-.notes-title { font-size: calc(var(--ex-notes-size, 24px) + 5px); margin: 0 0 15px 0; color: var(--ex-danger); border-bottom: 1px dashed var(--ex-border); padding-bottom: 10px;}
-.notes-list-preview { margin: 0; padding-left: 30px; font-size: var(--ex-notes-size, 24px); line-height: 1.6; color: var(--ex-text); }
-.notes-list-preview li { margin-bottom: 8px; }
 </style>

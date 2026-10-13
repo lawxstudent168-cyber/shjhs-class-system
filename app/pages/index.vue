@@ -226,7 +226,7 @@ import HomeEnglishSong from '~~/components/home/HomeEnglishSong.vue'
 import HomeGoodArticle from '~~/components/home/HomeGoodArticle.vue'
 import HomeStudentAssignments from '~~/components/home/HomeStudentAssignments.vue' 
 import { normalizeClassNotes } from '~/utils/classNotes.js'
-import { isValidExamDate, taiwanDateISO } from '~/utils/examSchedule.js'
+import { isValidExamDate, taiwanDateISO, taiwanClockHHMMSS } from '~/utils/examSchedule.js'
 import { isVideoBlackoutTime } from '~/utils/videoBlackout.js'
 
 // 💡 匯入剛剛拆分出來的強大 Composables
@@ -246,7 +246,7 @@ const isWeekday = dDate.getDay() !== 0 && dDate.getDay() !== 6
 const currentTime = ref('')
 const nowTick = ref(Date.now())
 let timer = null
-const updateTime = () => { nowTick.value = Date.now(); currentTime.value = new Date().toLocaleTimeString('zh-TW', { hour12: false }) }
+const updateTime = () => { nowTick.value = Date.now(); currentTime.value = taiwanClockHHMMSS(nowTick.value) }
 
 // 狀態控制
 const showEmergencyModal = ref(false)
