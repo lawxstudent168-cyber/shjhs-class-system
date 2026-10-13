@@ -1,6 +1,7 @@
 import { ref, computed, unref } from 'vue'
 import { displayedExamSchedule, normalizeExamSchedule, taiwanDateISO } from '../utils/examSchedule.js'
 import { normalizeClassNotes, weeklyClassNotes } from '../utils/classNotes.js'
+import { resolveSeatingLayout } from '../utils/seatingSchedule.js'
 
 export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCategoryRef, currentIdentityRef, allStudentsRef, allStudentsForLoginRef, todayAttendancesRef, nowTickRef) {
   const contactBookItems = ref([])
@@ -54,7 +55,8 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
   const allClassNoteItems = ref([])
   const classNotesTodayISO = computed(() => taiwanDateISO(unref(nowTickRef)))
   const classNoteItems = computed(() => weeklyClassNotes(allClassNoteItems.value, classNotesTodayISO.value))
-  const seatingChart = ref({ isVisible: false, isRotated: false, seats: [], settings: {} })
+  const savedSeatingData = ref(null)
+  const seatingChart = computed(() => resolveSeatingLayout(savedSeatingData.value, examDayISO.value))
   const defaultHygieneData = { isVisibleOnIndex: false, morning: {}, lunch: {}, squad: {} }
   const hygieneData = ref(JSON.parse(JSON.stringify(defaultHygieneData)))
   const marqueeSettings = ref({})
@@ -158,8 +160,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
             case 'english_song_schedule_data': if (typeof v === 'object') englishSongSchedule.value = { ...englishSongSchedule.value, ...v }; break
             case 'parent_notices_data': if (Array.isArray(v)) { parentNotices.value = v.filter(n => !n.isHidden && (!n.startDate || n.startDate <= todayISO) && (!n.endDate || n.endDate >= todayISO)) }; break
             case 'class_notes_data': allClassNoteItems.value = normalizeClassNotes(v); break
-            case 'seating_chart_data': 
-              if (typeof v === 'object') { seatingChart.value = { isVisible: v.isVisible || false, isRotated: v.isRotated || false, seats: (Array.isArray(v.seats) ? v.seats : []).map(seat => seat.content !== undefined ? { id: seat.id, isHidden: seat.isHidden, seatNum: String(seat.content).split('\n')[0] || '', name: String(seat.content).split('\n')[1] || '', other: String(seat.content).split('\n').slice(2).join(' ') || '' } : seat), settings: v.settings || {} } } break
+            case 'seating_chart_data': if (typeof v === 'object') savedSeatingData.value = v; break
             case 'hygiene_management_data': if (typeof v === 'object') hygieneData.value = { ...hygieneData.value, ...v }; break
             case 'marquee_settings': marqueeSettings.value = v; break
             case 'force_logout_timestamp': {

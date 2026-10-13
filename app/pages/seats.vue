@@ -71,7 +71,7 @@
             @click="switchMode(m.key)"
           >
             {{ m.label }}
-            <span v-if="activePublishedMode === m.key" class="published-badge">首頁顯示中</span>
+            <span v-if="effectiveTodayMode === m.key" class="published-badge">今日首頁</span>
           </button>
         </div>
         <div class="mode-actions">
@@ -81,17 +81,46 @@
             <option v-for="m in modeDefs.filter(m => m.key !== currentEditMode)" :key="m.key" :value="m.key">{{ m.label }}</option>
           </select>
           <button @click="copyFromMode" :disabled="!copySourceMode" class="btn-copy-normal">📋 完整複製</button>
+          <button @click="clearCurrentMode" class="btn-clear-mode">🧹 清空此模式</button>
           <button @click="exportCurrentMode('json')" class="btn-export-json">匯出此模式 JSON</button>
           <button @click="exportCurrentMode('csv')" class="btn-export-csv">匯出此模式 CSV</button>
           <button @click="modeFileInput?.click()" class="btn-import-mode">匯入此模式 CSV／JSON</button>
           <input ref="modeFileInput" type="file" accept=".csv,.json,text/csv,application/json" class="visually-hidden" @change="importCurrentMode">
 
-          <button v-if="activePublishedMode !== currentEditMode" @click="setAsPublished" class="btn-set-publish">
-            🚩 將「{{ currentModeLabel }}」設為首頁顯示
+          <button v-if="effectiveTodayMode !== currentEditMode" @click="setAsPublished" class="btn-set-publish">
+            🚩 從今天起顯示「{{ currentModeLabel }}」
           </button>
-          <span v-else class="status-text-success">✅ 目前正在編輯首頁顯示的模式</span>
+          <span v-else class="status-text-success">✅ 這個模式今天在首頁顯示</span>
         </div>
       </div>
+
+      <section class="mode-schedule-panel">
+        <h3>📅 首頁座位模式日期排程</h3>
+        <p>開始日期從台灣時間當天起生效，直到下一個開始日期；月考與模擬考指定日期只覆蓋當天，隔天回到原排程。修改後請按「儲存所有模式」。</p>
+        <div class="schedule-input-row">
+          <label for="mode-start-date">開始日期</label>
+          <input id="mode-start-date" v-model="newStartDate" type="date" />
+          <label for="mode-start-mode">顯示模式</label>
+          <select id="mode-start-mode" v-model="newStartMode">
+            <option v-for="mode in modeDefs" :key="mode.key" :value="mode.key">{{ mode.label }}</option>
+          </select>
+          <button @click="addModeStart">加入或更改</button>
+        </div>
+        <div v-if="modeStarts.length" class="mode-start-list">
+          <div v-for="entry in modeStarts" :key="entry.date">
+            <strong>{{ entry.date }}</strong> 起：{{ modeLabel(entry.mode) }}
+            <button @click="removeModeStart(entry.date)" :aria-label="`刪除 ${entry.date} 的排程`">刪除</button>
+          </div>
+        </div>
+        <div class="special-mode-row">
+          <strong>月考模式（最多兩天）</strong>
+          <input v-for="index in 2" :key="`exam-${index}`" v-model="examDates[index - 1]" type="date" :aria-label="`月考日期 ${index}`" />
+        </div>
+        <div class="special-mode-row">
+          <strong>模擬考模式（最多兩天）</strong>
+          <input v-for="index in 2" :key="`mock-${index}`" v-model="mockDates[index - 1]" type="date" :aria-label="`模擬考日期 ${index}`" />
+        </div>
+      </section>
 
       <div class="tips">
         💡 提示：目前正在編輯【{{ currentModeLabel }}】。系統會自動依據「座號」對應資料庫載入「姓名」。拖曳座位可交換位置，點選左上角「取消」可隱藏不需要的空位。
@@ -192,7 +221,17 @@
               <h5 class="detail-title">🗓️ {{ selectedHistoryDate }} 查詢結果</h5>
               
               <div class="history-status-badge" :class="{ 'is-fallback': effectiveDate !== selectedHistoryDate }">
-                {{ effectiveDate === selectedHistoryDate ? '✅ 當日有專屬紀錄' : (effectiveDate === '無紀錄' ? '⚠️ 過去尚無任何紀錄' : `🔄 當日無變更，沿用 ${effectiveDate} 的座位`) }}
+                {{ effectiveDate === selectedHistoryDate ? '✅ 當日有專屬紀錄' : (effectiveDate === '排程預覽' ? '📅 依目前日期排程預覽，尚非歷史存檔' : (effectiveDate === '無紀錄' ? '⚠️ 過去尚無任何紀錄' : `🔄 當日無變更，沿用 ${effectiveDate} 的座位`)) }}
+              </div>
+
+              <div v-if="selectedHistoryDate <= todayISO" class="history-edit-row">
+                <label for="history-mode">將此日歷史改為：</label>
+                <select id="history-mode" v-model="historyMode">
+                  <option value="">選擇模式</option>
+                  <option v-for="mode in modeDefs" :key="mode.key" :value="mode.key">{{ mode.label }}</option>
+                </select>
+                <button @click="replaceHistoryWithMode" :disabled="!historyMode || isSavingHistory">{{ isSavingHistory ? '儲存中...' : '💾 套用並儲存此日紀錄' }}</button>
+                <small>只修改所選日期的歷史快照，不更改首頁排程。</small>
               </div>
 
               <div class="history-seating-preview" v-if="historyLayoutData">
@@ -283,8 +322,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { exportSeatingModeJson, exportSeatingModeCsv, importSeatingModeJson, importSeatingModeCsv } from '../utils/seatingModeFiles.js'
+import { isValidExamDate, taiwanDateISO } from '../utils/examSchedule.js'
+import { emptySeatingMode, normalizeSeatingSchedule, resolveSeatingLayout, resolveSeatingMode } from '../utils/seatingSchedule.js'
 const supabase = useSupabaseClient()
 
 const isLoggedIn = ref(false)
@@ -306,6 +347,19 @@ const activePublishedMode = ref('normal')
 const copySourceMode = ref('')
 const modeFileInput = ref(null)
 const currentModeLabel = computed(() => modeDefs.find(m => m.key === currentEditMode.value)?.label || '')
+const modeLabel = key => modeDefs.find(mode => mode.key === key)?.label || key
+const modeStarts = ref([])
+const newStartDate = ref('')
+const newStartMode = ref('normal')
+const examDates = ref(['', ''])
+const mockDates = ref(['', ''])
+const scheduledSpecialDates = () => [
+  ...examDates.value.filter(Boolean).map(date => ({ date, mode: 'exam' })),
+  ...mockDates.value.filter(Boolean).map(date => ({ date, mode: 'mock' }))
+]
+const currentModeSchedule = () => normalizeSeatingSchedule({ starts: modeStarts.value, specialDates: scheduledSpecialDates() })
+const currentSeatingData = () => ({ activeMode: activePublishedMode.value, modes: modesData.value, modeSchedule: currentModeSchedule() })
+const effectiveTodayMode = computed(() => resolveSeatingMode(currentSeatingData(), todayISO.value))
 
 // 目前畫面編輯器中的變數
 const isRotated = ref(false)
@@ -335,17 +389,22 @@ const showPrintModal = ref(false)
 const isSavingPrint = ref(false)
 
 const dDate = new Date()
-const todayISO = `${dDate.getFullYear()}-${String(dDate.getMonth()+1).padStart(2,'0')}-${String(dDate.getDate()).padStart(2,'0')}`
+const todayISO = ref(taiwanDateISO())
+let dateRefreshTimer = null
 const calYear = ref(dDate.getFullYear()); const calMonth = ref(dDate.getMonth())
 const monthRecords = ref([]); const selectedHistoryDate = ref(''); const effectiveDate = ref(''); const historyLayoutData = ref(null)
+const historyMode = ref('')
+const isSavingHistory = ref(false)
 
 onMounted(async () => {
+  dateRefreshTimer = setInterval(() => { todayISO.value = taiwanDateISO() }, 60000)
   if (sessionStorage.getItem('seats_admin_logged_in') === 'true') {
     isLoggedIn.value = true
     await fetchLayout()
     await fetchMonthRecords()
   }
 })
+onUnmounted(() => { if (dateRefreshTimer) clearInterval(dateRefreshTimer) })
 
 const handleLogin = async () => {
   if (!passwordInput.value) return
@@ -403,6 +462,23 @@ const switchMode = (newModeKey) => {
 
 const setAsPublished = () => {
   activePublishedMode.value = currentEditMode.value
+  const date = taiwanDateISO()
+  modeStarts.value = normalizeSeatingSchedule({ starts: [...modeStarts.value.filter(item => item.date !== date), { date, mode: currentEditMode.value }] }).starts
+}
+
+const addModeStart = () => {
+  if (!isValidExamDate(newStartDate.value)) return alert('請選擇有效的開始日期。')
+  modeStarts.value = normalizeSeatingSchedule({ starts: [...modeStarts.value.filter(item => item.date !== newStartDate.value), { date: newStartDate.value, mode: newStartMode.value }] }).starts
+  newStartDate.value = ''
+}
+
+const removeModeStart = date => { modeStarts.value = modeStarts.value.filter(item => item.date !== date) }
+
+const clearCurrentMode = () => {
+  if (!confirm(`確定清空「${currentModeLabel.value}」的全部座位、文字設定與列印設定嗎？此模式若排程顯示在首頁，儲存後也會顯示空白座位。`)) return
+  modesData.value[currentEditMode.value] = emptySeatingMode()
+  loadMemoryToEditor(currentEditMode.value)
+  alert('此模式已清空。按「儲存所有模式」才會寫入資料庫。')
 }
 
 const copyFromMode = () => {
@@ -475,6 +551,10 @@ const fetchLayout = async () => {
 
   if (data?.setting_value) {
     const val = data.setting_value
+    const schedule = normalizeSeatingSchedule(val.modeSchedule)
+    modeStarts.value = schedule.starts
+    examDates.value = [...schedule.specialDates.filter(item => item.mode === 'exam').map(item => item.date).slice(0, 2), '', ''].slice(0, 2)
+    mockDates.value = [...schedule.specialDates.filter(item => item.mode === 'mock').map(item => item.date).slice(0, 2), '', ''].slice(0, 2)
     if (val.modes) {
       modesData.value = { ...defaultModes(), ...Object.fromEntries(modeDefs.filter(mode => val.modes[mode.key]).map(mode => [mode.key, val.modes[mode.key]])) }
       activePublishedMode.value = modesData.value[val.activeMode] ? (val.activeMode || 'normal') : 'normal'
@@ -495,15 +575,22 @@ const fetchLayout = async () => {
     }
   }
 
-  loadMemoryToEditor(activePublishedMode.value)
+  loadMemoryToEditor(effectiveTodayMode.value)
   await syncFromStudents(false)
 }
 
 const saveLayout = async () => {
   isSaving.value = true
   try {
+    const specialDates = scheduledSpecialDates()
+    if (specialDates.some(item => !isValidExamDate(item.date)) || new Set(specialDates.map(item => item.date)).size !== specialDates.length) {
+      throw new Error('月考與模擬考日期不可重複，且必須是有效日期')
+    }
     syncEditorToMemory()
-    const activeData = modesData.value[activePublishedMode.value]
+    const modeSchedule = currentModeSchedule()
+    const today = taiwanDateISO()
+    const effectiveMode = resolveSeatingMode(currentSeatingData(), today)
+    const activeData = modesData.value[effectiveMode]
     
     const payload = { 
       seats: activeData.seats, 
@@ -512,18 +599,20 @@ const saveLayout = async () => {
       settings: activeData.settings, 
       printData: activeData.printData,
       activeMode: activePublishedMode.value,
-      modes: modesData.value                 
+      modes: modesData.value,
+      modeSchedule
     }
     
     const { error: settingsError } = await supabase.from('system_settings').upsert({ setting_key: 'seating_chart_data', setting_value: payload }, { onConflict: 'setting_key' })
     if (settingsError) throw settingsError
-    const { error: historyError } = await supabase.from('seating_records').upsert({ record_date: todayISO, layout_data: payload }, { onConflict: 'record_date' })
-    if (historyError) throw historyError
+    const { error: historyError } = await supabase.from('seating_records').upsert({ record_date: today, layout_data: { ...activeData, activeMode: effectiveMode } }, { onConflict: 'record_date' })
 
-    const activeLabel = modeDefs.find(m => m.key === activePublishedMode.value).label
-    alert(`✅ 所有座位模式已成功儲存！\n首頁目前已套用：「${activeLabel}」`)
+    const activeLabel = modeLabel(effectiveMode)
+    alert(historyError
+      ? `✅ 首頁座位排程已儲存，目前套用「${activeLabel}」；但今日歷史紀錄寫入失敗：${historyError.message}`
+      : `✅ 所有座位模式已成功儲存！\n首頁目前已套用：「${activeLabel}」`)
     await fetchMonthRecords()
-  } catch (error) { alert('❌ 儲存失敗') } finally { isSaving.value = false }
+  } catch (error) { alert(`❌ 儲存失敗：${error.message}`) } finally { isSaving.value = false }
 }
 
 const savePrintTemplate = () => {
@@ -568,14 +657,50 @@ const calendarDays = computed(() => {
   }
   return days
 })
-const prevMonth = async () => { if (calMonth.value === 0) { calYear.value--; calMonth.value = 11 } else calMonth.value--; selectedHistoryDate.value = ''; historyLayoutData.value = null; await fetchMonthRecords() }
-const nextMonth = async () => { if (calMonth.value === 11) { calYear.value++; calMonth.value = 0 } else calMonth.value++; selectedHistoryDate.value = ''; historyLayoutData.value = null; await fetchMonthRecords() }
+const prevMonth = async () => { if (calMonth.value === 0) { calYear.value--; calMonth.value = 11 } else calMonth.value--; selectedHistoryDate.value = ''; historyMode.value = ''; historyLayoutData.value = null; await fetchMonthRecords() }
+const nextMonth = async () => { if (calMonth.value === 11) { calYear.value++; calMonth.value = 0 } else calMonth.value++; selectedHistoryDate.value = ''; historyMode.value = ''; historyLayoutData.value = null; await fetchMonthRecords() }
 
 const viewHistory = async (day) => {
-  if (day.empty) return; selectedHistoryDate.value = day.dateStr; historyLayoutData.value = null
-  const { data } = await supabase.from('seating_records').select('*').lte('record_date', day.dateStr).order('record_date', { ascending: false }).limit(1)
-  if (data && data.length > 0) { historyLayoutData.value = data[0].layout_data; effectiveDate.value = data[0].record_date } 
-  else { effectiveDate.value = '無紀錄'; historyLayoutData.value = null }
+  if (day.empty) return
+  selectedHistoryDate.value = day.dateStr
+  historyMode.value = ''
+  historyLayoutData.value = null
+  const { data, error } = await supabase.from('seating_records').select('*').lte('record_date', day.dateStr).order('record_date', { ascending: false }).limit(1)
+  if (error) return alert(`查詢歷史失敗：${error.message}`)
+  if (data?.[0]?.record_date === day.dateStr) {
+    historyLayoutData.value = data[0].layout_data
+    effectiveDate.value = day.dateStr
+    historyMode.value = data[0].layout_data?.activeMode || ''
+    return
+  }
+  const schedule = currentModeSchedule()
+  if (day.dateStr > taiwanDateISO() || schedule.starts.some(item => item.date <= day.dateStr) || schedule.specialDates.some(item => item.date === day.dateStr)) {
+    syncEditorToMemory()
+    historyLayoutData.value = resolveSeatingLayout(currentSeatingData(), day.dateStr)
+    effectiveDate.value = '排程預覽'
+  } else if (data?.[0]) {
+    historyLayoutData.value = data[0].layout_data
+    effectiveDate.value = data[0].record_date
+  } else {
+    effectiveDate.value = '無紀錄'
+  }
+}
+
+const replaceHistoryWithMode = async () => {
+  const date = selectedHistoryDate.value
+  if (!isValidExamDate(date) || date > taiwanDateISO() || !modesData.value[historyMode.value]) return
+  const label = modeLabel(historyMode.value)
+  if (!confirm(`確定將 ${date} 的歷史紀錄改為「${label}」目前的座位配置嗎？此操作會覆蓋該日原有快照，但不會改變首頁排程。`)) return
+  isSavingHistory.value = true
+  try {
+    syncEditorToMemory()
+    const snapshot = JSON.parse(JSON.stringify({ ...modesData.value[historyMode.value], activeMode: historyMode.value }))
+    const { error } = await supabase.from('seating_records').upsert({ record_date: date, layout_data: snapshot }, { onConflict: 'record_date' })
+    if (error) throw error
+    await fetchMonthRecords()
+    await viewHistory({ dateStr: date })
+    alert(`已將 ${date} 的歷史紀錄改為「${label}」。`)
+  } catch (error) { alert(`修改歷史失敗：${error.message}`) } finally { isSavingHistory.value = false }
 }
 
 const exportHistory = async (type) => {
@@ -633,6 +758,7 @@ const exportHistory = async (type) => {
 .published-badge { position: absolute; top: -10px; right: -10px; background: #ef4444; color: white; font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4); border: 2px solid white;}
 
 .mode-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn-clear-mode { background: #b91c1c; color: white; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; }
 .mode-source-select { padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .btn-copy-normal { background: #6366f1; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: 0.2s;}
@@ -642,6 +768,17 @@ const exportHistory = async (type) => {
 .btn-set-publish { background: #f59e0b; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: 0.2s; }
 .btn-set-publish:hover { background: #d97706; }
 .status-text-success { font-weight: bold; color: #10b981; font-size: 1.05rem; display: flex; align-items: center; gap: 5px;}
+.mode-schedule-panel { background: white; border-radius: 8px; padding: 16px 24px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.mode-schedule-panel h3 { margin: 0 0 8px; color: #0f766e; }
+.mode-schedule-panel p { margin: 0 0 14px; color: #475569; line-height: 1.5; }
+.schedule-input-row, .special-mode-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.schedule-input-row input, .schedule-input-row select, .special-mode-row input, .history-edit-row select { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; }
+.schedule-input-row button, .history-edit-row button { padding: 8px 12px; border: 0; border-radius: 6px; color: white; background: #0f766e; font-weight: bold; cursor: pointer; }
+.history-edit-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+.mode-start-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.mode-start-list > div { background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 6px; padding: 6px 9px; }
+.mode-start-list button { margin-left: 8px; border: 0; background: transparent; color: #b91c1c; cursor: pointer; }
+.special-mode-row strong { min-width: 190px; }
 
 .tips { background: #fffbeb; color: #b45309; padding: 10px 15px; border-radius: 6px; border: 1px dashed #fcd34d; margin-bottom: 20px; font-size: 0.95rem; line-height: 1.5; }
 
@@ -701,6 +838,8 @@ const exportHistory = async (type) => {
 .detail-title { margin: 0 0 10px 0; font-size: 1.2rem; color: #1e293b; }
 .history-status-badge { display: inline-block; padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; margin-bottom: 15px; background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;}
 .history-status-badge.is-fallback { background: #fef3c7; color: #92400e; border: 1px solid #fde68a;}
+.history-edit-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.history-edit-row small { flex-basis: 100%; color: #64748b; }
 .history-seating-preview { overflow-x: auto; background: white; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;}
 
 .seating-wrapper { width: 100%; -webkit-overflow-scrolling: touch; }
