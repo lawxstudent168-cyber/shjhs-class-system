@@ -75,8 +75,8 @@ defineEmits(['exit'])
 </script>
 
 <style scoped>
-.exam-dashboard { background-color: var(--ex-bg); color: var(--ex-text); min-height: 100vh; padding: 20px 30px; display: flex; flex-direction: column; position: relative; align-items: stretch; transition: background-color 0.5s ease;}
-.exit-exam-btn { position: fixed; bottom: 12px; right: 12px; background: var(--ex-panel-bg); border: 1px solid var(--ex-border); color: var(--ex-text); padding: 5px 9px; border-radius: 7px; cursor: pointer; font-size: 0.78rem; opacity: 0.65; transition: opacity 0.2s; z-index: 50; }
+.exam-dashboard { background-color: var(--ex-bg); color: var(--ex-text); min-height: 100vh; padding: 28px 30px 20px; display: flex; flex-direction: column; position: relative; align-items: stretch; transition: background-color 0.5s ease;}
+.exit-exam-btn { position: fixed; top: 4px; right: 12px; background: var(--ex-panel-bg); border: 1px solid var(--ex-border); color: var(--ex-text); padding: 3px 8px; border-radius: 7px; cursor: pointer; font-size: 0.75rem; line-height: 1; opacity: 0.65; transition: opacity 0.2s; z-index: 50; }
 .exit-exam-btn:hover, .exit-exam-btn:focus-visible { opacity: 1; }
 .exam-header { display: flex; align-items: center; gap: 18px; min-width: 0; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid var(--ex-border); }
 .exam-main-title { flex: 1 1 40%; min-width: 0; font-size: min(var(--ex-title-size, 56px), 2.9vw); margin: 0; color: var(--ex-title); letter-spacing: 1px; text-align: center; white-space: nowrap; }
@@ -120,7 +120,7 @@ defineEmits(['exit'])
   .exam-main-title { font-size: min(var(--ex-title-size, 56px), 48px); }
 }
 @media (max-width: 768px) {
-  .exam-dashboard { padding: 20px; }
+  .exam-dashboard { padding: 28px 20px 20px; }
   .exam-main-title { font-size: min(var(--ex-title-size, 56px), 32px); }
   .exam-table { font-size: 1.2rem; }
   .exam-table th, .exam-table td { padding: 12px; }
