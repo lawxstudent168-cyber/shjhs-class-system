@@ -1,21 +1,18 @@
 <template>
   <div class="exam-dashboard" :style="currentThemeStyles">
-    <button @click="$emit('exit')" class="exit-exam-btn">✖ 結束大考模式</button>
+    <button @click="$emit('exit')" class="exit-exam-btn" title="結束大考模式">✖ 結束</button>
     
     <div class="exam-header">
       <h1 class="exam-main-title">{{ examData.title }}</h1>
       <section class="exam-attendance" aria-label="今日出缺席統計">
-        <div class="exam-attendance-counts">
-          <span>應到 <strong>{{ attendanceSummary.expected }}</strong></span>
-          <span>已到 <strong>{{ attendanceSummary.present }}</strong></span>
-          <span>全天請假 <strong>{{ attendanceSummary.leave }}</strong></span>
-          <span>晚到請假 <strong>{{ attendanceSummary.lateLeave }}</strong></span>
-          <span>早退請假 <strong>{{ attendanceSummary.earlyLeave }}</strong></span>
-          <span>遲到 <strong>{{ attendanceSummary.late }}</strong></span>
-          <span>未到 <strong>{{ attendanceSummary.absent }}</strong></span>
-        </div>
-        <div class="exam-attendance-seats">未到座號：{{ attendanceSummary.absentSeats.join('、') || '無' }}</div>
-        <div class="exam-attendance-seats">請假座號：{{ attendanceSummary.leaveSeats.join('、') || '無' }}</div>
+        <span>應到 <strong>{{ attendanceSummary.expected }}</strong></span>
+        <span>已到 <strong>{{ attendanceSummary.present }}</strong></span>
+        <span class="attendance-leave">全天請假 <strong>{{ attendanceSummary.leave }}</strong></span>
+        <span class="attendance-leave">晚到請假 <strong>{{ attendanceSummary.lateLeave }}</strong></span>
+        <span class="attendance-leave">早退請假 <strong>{{ attendanceSummary.earlyLeave }}</strong></span>
+        <span>遲到 <strong>{{ attendanceSummary.late }}</strong></span>
+        <span class="attendance-absent">未到 <strong>{{ attendanceSummary.absent }}</strong>（{{ attendanceSummary.absentSeats.join('、') || '無' }}）</span>
+        <span class="attendance-leave">請假座號 {{ attendanceSummary.leaveSeats.join('、') || '無' }}</span>
       </section>
     </div>
     
@@ -78,16 +75,18 @@ defineEmits(['exit'])
 </script>
 
 <style scoped>
-.exam-dashboard { background-color: var(--ex-bg); color: var(--ex-text); min-height: 100vh; padding: 40px 60px; display: flex; flex-direction: column; position: relative; align-items: stretch; transition: background-color 0.5s ease;}
-.exit-exam-btn { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: var(--ex-text); padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 1.1rem; transition: 0.2s; z-index: 10;}
-.exit-exam-btn:hover { background: rgba(255,255,255,0.2); color: var(--ex-title); }
-.exam-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 520px); align-items: center; gap: 24px; margin-bottom: 24px; padding: 42px 0 16px; border-bottom: 2px solid var(--ex-border); }
-.exam-main-title { font-size: var(--ex-title-size, 56px); margin: 0; color: var(--ex-title); letter-spacing: 2px; text-align: center; overflow-wrap: anywhere; }
-.exam-attendance { background: var(--ex-panel-bg); border: 1px solid var(--ex-border); border-radius: 12px; padding: 12px 16px; font-size: 16px; line-height: 1.45; }
-.exam-attendance-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; padding-bottom: 8px; border-bottom: 1px solid var(--ex-border); }
-.exam-attendance-counts span { white-space: nowrap; }
-.exam-attendance-counts strong { color: var(--ex-title); font-size: 1.1em; }
-.exam-attendance-seats { margin-top: 5px; overflow-wrap: anywhere; }
+.exam-dashboard { background-color: var(--ex-bg); color: var(--ex-text); min-height: 100vh; padding: 20px 30px; display: flex; flex-direction: column; position: relative; align-items: stretch; transition: background-color 0.5s ease;}
+.exit-exam-btn { position: fixed; bottom: 12px; right: 12px; background: var(--ex-panel-bg); border: 1px solid var(--ex-border); color: var(--ex-text); padding: 5px 9px; border-radius: 7px; cursor: pointer; font-size: 0.78rem; opacity: 0.65; transition: opacity 0.2s; z-index: 50; }
+.exit-exam-btn:hover, .exit-exam-btn:focus-visible { opacity: 1; }
+.exam-header { display: flex; align-items: center; gap: 18px; min-width: 0; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid var(--ex-border); }
+.exam-main-title { flex: 1 1 40%; min-width: 0; font-size: min(var(--ex-title-size, 56px), 2.9vw); margin: 0; color: var(--ex-title); letter-spacing: 1px; text-align: center; white-space: nowrap; }
+.exam-attendance { flex: 0 1 60%; min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 6px; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; font-size: clamp(11px, 0.75vw, 15px); line-height: 1.3; }
+.exam-attendance span { flex: none; padding: 4px 5px; border-radius: 5px; background: var(--ex-panel-bg); }
+.exam-attendance strong { color: var(--ex-title); }
+.exam-attendance .attendance-leave { background: #fef3c7; color: #78350f; font-weight: bold; }
+.exam-attendance .attendance-leave strong { color: inherit; }
+.exam-attendance .attendance-absent { background: #fee2e2; color: #991b1b; font-weight: bold; }
+.exam-attendance .attendance-absent strong { color: inherit; }
 .exam-split-layout { display: flex; gap: 60px; flex: 1; align-items: flex-start; justify-content: center; }
 .exam-left-panel { flex: 1; max-width: 900px; }
 .exam-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 1.8rem; background: var(--ex-panel-bg); border-radius: 16px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2);}
@@ -114,15 +113,14 @@ defineEmits(['exit'])
 .notes-list-preview li { margin-bottom: 8px; }
 
 @media (max-width: 1024px) {
-  .exam-header { grid-template-columns: 1fr; }
+  .exam-header { flex-direction: column; align-items: stretch; }
+  .exam-attendance { flex: none; width: 100%; font-size: 13px; }
   .exam-split-layout { flex-direction: column; align-items: center; }
   .exam-left-panel, .exam-right-panel { width: 100%; max-width: 100%; }
   .exam-main-title { font-size: min(var(--ex-title-size, 56px), 48px); }
 }
 @media (max-width: 768px) {
   .exam-dashboard { padding: 20px; }
-  .exam-header { padding-top: 52px; }
-  .exam-attendance-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .exam-main-title { font-size: min(var(--ex-title-size, 56px), 32px); }
   .exam-table { font-size: 1.2rem; }
   .exam-table th, .exam-table td { padding: 12px; }
