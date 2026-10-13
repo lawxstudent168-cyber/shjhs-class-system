@@ -9,6 +9,8 @@
       :countdownMinutes="countdownMinutes"
       :countdownText="countdownText"
       :currentThemeStyles="currentThemeStyles"
+      :allStudents="allStudents"
+      :todayAttendances="todayAttendances"
       @exit="isExamModeView = false"
     />
 
