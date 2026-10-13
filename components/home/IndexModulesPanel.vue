@@ -12,6 +12,7 @@
         :videoUrl="todayVideoUrl" 
         :isMuted="youtubeIsMuted"
         :isClassTime="isClassTime"
+        :isScheduledBlackout="isVideoBlackout"
       />
 
       <HomeFoxNews v-if="mod.id === 'foxNews' && mod.isVisible" />
@@ -41,7 +42,8 @@ const props = defineProps({
   indexDynamicSorting: { type: Boolean, default: false },
   isClassTime: { type: Boolean, default: false },
   todayVideoUrl: { type: String, default: '' },
-  youtubeIsMuted: { type: Boolean, default: true }
+  youtubeIsMuted: { type: Boolean, default: true },
+  isVideoBlackout: { type: Boolean, default: false }
 })
 
 // 💡 動態重組模組順序

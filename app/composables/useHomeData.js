@@ -48,6 +48,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
 
   const youtubeSchedule = ref({})
   const youtubeIsMuted = ref(true)
+  const youtubeBlockedDates = ref([])
   const englishSongSchedule = ref({ 0: '', 1: '', 2: '', 3: '', 4: '', 5: '', 6: '', isVisible: true })
   const parentNotices = ref([])
   const allClassNoteItems = ref([])
@@ -143,7 +144,17 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
               indexModulesConfig.value = loadedMods
               break
             case 'youtube_schedule_data': 
-              if (typeof v === 'object') { if (v.videos) { youtubeSchedule.value = v.videos; youtubeIsMuted.value = v.isMuted !== false } else { youtubeSchedule.value = v; youtubeIsMuted.value = true } } break
+              if (typeof v === 'object') {
+                if (v.videos) {
+                  youtubeSchedule.value = v.videos
+                  youtubeIsMuted.value = v.isMuted !== false
+                  youtubeBlockedDates.value = Array.isArray(v.blockedDates) ? v.blockedDates : []
+                } else {
+                  youtubeSchedule.value = v
+                  youtubeIsMuted.value = true
+                  youtubeBlockedDates.value = []
+                }
+              } break
             case 'english_song_schedule_data': if (typeof v === 'object') englishSongSchedule.value = { ...englishSongSchedule.value, ...v }; break
             case 'parent_notices_data': if (Array.isArray(v)) { parentNotices.value = v.filter(n => !n.isHidden && (!n.startDate || n.startDate <= todayISO) && (!n.endDate || n.endDate >= todayISO)) }; break
             case 'class_notes_data': allClassNoteItems.value = normalizeClassNotes(v); break
@@ -206,7 +217,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
     contactBookItems, officerPasswords, isHistoryVisibleOnIndex, globalButtonSettings, roleButtonSettings, clockConfig,
     announcements, parentAnnouncements, isAnnouncementVisibleOnIndex, isParentAnnouncementVisibleOnIndex, isNoticeBoardVisibleOnIndex,
     scheduleData, scheduleButtonConfig, examData, autoRefreshConfig, indexModulesConfig, indexDynamicSorting, isWikiFeaturedVisible,
-    youtubeSchedule, youtubeIsMuted, englishSongSchedule, parentNotices, classNoteItems, allClassNoteItems, seatingChart, hygieneData,
+    youtubeSchedule, youtubeIsMuted, youtubeBlockedDates, englishSongSchedule, parentNotices, classNoteItems, allClassNoteItems, seatingChart, hygieneData,
     marqueeSettings, unreadMsgCount, assignmentsData, assignmentSubmissionsData, excludedAssignmentIds, goodArticles,
     expectedTeacherPwd, loadTeacherPwd, fetchData
   }

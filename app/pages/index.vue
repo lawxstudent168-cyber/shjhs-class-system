@@ -146,6 +146,7 @@
               :isClassTime="isClassTime"
               :todayVideoUrl="todayVideoUrl"
               :youtubeIsMuted="youtubeIsMuted"
+              :isVideoBlackout="isVideoBlackout"
             />
             
           </div>
@@ -223,6 +224,7 @@ import HomeGoodArticle from '~~/components/home/HomeGoodArticle.vue'
 import HomeStudentAssignments from '~~/components/home/HomeStudentAssignments.vue' 
 import { normalizeClassNotes } from '~/utils/classNotes.js'
 import { isValidExamDate, taiwanDateISO } from '~/utils/examSchedule.js'
+import { isVideoBlackoutTime } from '~/utils/videoBlackout.js'
 
 // 💡 匯入剛剛拆分出來的強大 Composables
 import { useFormatters } from '~/composables/useFormatters'
@@ -273,7 +275,7 @@ const {
   contactBookItems, officerPasswords, isHistoryVisibleOnIndex, globalButtonSettings, roleButtonSettings, clockConfig,
   announcements, parentAnnouncements, isAnnouncementVisibleOnIndex, isParentAnnouncementVisibleOnIndex, isNoticeBoardVisibleOnIndex,
   scheduleData, scheduleButtonConfig, examData, autoRefreshConfig, indexModulesConfig, indexDynamicSorting, isWikiFeaturedVisible,
-  youtubeSchedule, youtubeIsMuted, englishSongSchedule, parentNotices, classNoteItems, allClassNoteItems, seatingChart, hygieneData,
+  youtubeSchedule, youtubeIsMuted, youtubeBlockedDates, englishSongSchedule, parentNotices, classNoteItems, allClassNoteItems, seatingChart, hygieneData,
   marqueeSettings, unreadMsgCount, assignmentsData, assignmentSubmissionsData, excludedAssignmentIds, goodArticles,
   expectedTeacherPwd, loadTeacherPwd, fetchData
 } = useHomeData(supabase, todayISO, isIpBrownlisted, activeRoleCategory, currentIdentity, allStudents, allStudentsForLogin, todayAttendances, nowTick)
@@ -296,6 +298,7 @@ const activeGoodArticle = computed(() => goodArticles.value.find(a => a.is_publi
 const todayEnglishSongUrl = computed(() => englishSongSchedule.value[new Date(nowTick.value).getDay()] || '')
 const isEnglishSongVisible = computed(() => englishSongSchedule.value.isVisible !== false)
 const todayVideoUrl = computed(() => youtubeSchedule.value[new Date(nowTick.value).getDay()] || '')
+const isVideoBlackout = computed(() => isVideoBlackoutTime(youtubeBlockedDates.value, new Date(nowTick.value)))
 
 const indexButtonSettings = computed(() => {
   const roleSettings = roleButtonSettings.value[activeRoleCategory.value] || roleButtonSettings.value.anonymous

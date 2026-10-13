@@ -23,6 +23,23 @@
       <p class="warning-text">⚠️ 注意：如果取消靜音 (開啟聲音)，為了遵守各大瀏覽器「防擾民」政策，影片在下課時可能會被瀏覽器強制阻擋自動播放，需由學生手動點擊畫面才能開始播放。</p>
     </div>
 
+    <div class="blackout-settings">
+      <h4>🔒 指定日期白天禁播</h4>
+      <p>選定日期的台灣時間 07:30–17:45，即使課表顯示下課，首頁推薦影片仍會暫停；教室可輸入導師密碼暫時解鎖。其他日期照原本課表播放。</p>
+      <div class="blackout-controls">
+        <label for="blackout-date">禁播日期</label>
+        <input id="blackout-date" v-model="blackoutDateInput" type="date" class="blackout-date-input" />
+        <button type="button" class="add-date-btn" :disabled="!blackoutDateInput" @click="addBlackoutDate">➕ 加入禁播日期</button>
+      </div>
+      <div v-if="scheduleData.blockedDates.length" class="blackout-dates">
+        <span v-for="date in scheduleData.blockedDates" :key="date" class="blackout-date-chip">
+          {{ date }} <button type="button" :aria-label="`移除 ${date} 禁播`" @click="removeBlackoutDate(date)">×</button>
+        </span>
+      </div>
+      <p v-else class="blackout-empty">尚未指定禁播日期。</p>
+      <p class="blackout-save-hint">新增或移除日期後，請按上方「儲存影片排程」才會生效。</p>
+    </div>
+
     <div class="schedule-grid">
       <div v-for="(dayName, index) in daysMapping" :key="'yt-'+index" class="day-card" :class="{ 'is-today': index === String(currentDayIndex) }">
         <div class="day-header">
@@ -95,6 +112,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { isValidExamDate } from '../utils/examSchedule.js'
+import { normalizeVideoBlackoutDates } from '../utils/videoBlackout.js'
 
 const supabase = useSupabaseClient()
 
@@ -105,8 +124,10 @@ const currentDayIndex = new Date().getDay()
 const isSaving = ref(false)
 const scheduleData = ref({ 
   videos: { 0: '', 1: '', 2: '', 3: '', 4: '', 5: '', 6: '' },
-  isMuted: true 
+  isMuted: true,
+  blockedDates: []
 })
+const blackoutDateInput = ref('')
 
 // 🎵 英語歌曲狀態
 const isSavingSong = ref(false)
@@ -121,7 +142,11 @@ const fetchSchedules = async () => {
   const { data: ytData } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'youtube_schedule_data').maybeSingle()
   if (ytData && ytData.setting_value) {
     if (ytData.setting_value.videos) {
-      scheduleData.value = ytData.setting_value
+      scheduleData.value = {
+        ...scheduleData.value,
+        ...ytData.setting_value,
+        blockedDates: normalizeVideoBlackoutDates(ytData.setting_value.blockedDates)
+      }
     } else {
       scheduleData.value.videos = { ...scheduleData.value.videos, ...ytData.setting_value }
     }
@@ -137,6 +162,16 @@ const fetchSchedules = async () => {
 onMounted(() => {
   fetchSchedules()
 })
+
+const addBlackoutDate = () => {
+  if (!isValidExamDate(blackoutDateInput.value)) return alert('請選擇有效日期。')
+  scheduleData.value.blockedDates = normalizeVideoBlackoutDates([...scheduleData.value.blockedDates, blackoutDateInput.value])
+  blackoutDateInput.value = ''
+}
+
+const removeBlackoutDate = (date) => {
+  scheduleData.value.blockedDates = scheduleData.value.blockedDates.filter(value => value !== date)
+}
 
 const saveSchedule = async () => {
   isSaving.value = true
@@ -194,6 +229,18 @@ const extractVideoId = (url) => {
 .toggle-label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .large-checkbox { transform: scale(1.3); cursor: pointer; }
 .warning-text { margin: 8px 0 0 28px; color: #b45309; font-size: 0.9rem; font-weight: bold; }
+.blackout-settings { background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #e11d48; border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+.blackout-settings h4 { margin: 0 0 8px; color: #9f1239; font-size: 1.1rem; }
+.blackout-settings p { margin: 6px 0 12px; color: #475569; line-height: 1.5; }
+.blackout-controls, .blackout-dates { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.blackout-controls label { font-weight: bold; color: #334155; }
+.blackout-date-input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.add-date-btn { padding: 9px 13px; border: 0; border-radius: 6px; background: #e11d48; color: white; font-weight: bold; cursor: pointer; }
+.add-date-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.blackout-dates { margin-top: 12px; }
+.blackout-date-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; background: #ffe4e6; color: #9f1239; border-radius: 16px; font-weight: bold; }
+.blackout-date-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 1.15rem; }
+.blackout-settings .blackout-empty, .blackout-settings .blackout-save-hint { font-size: 0.9rem; margin-bottom: 0; }
 
 .dynamic-sort-box { background: #fdf2f8; border: 1px dashed #fbcfe8; padding: 15px 20px; border-radius: 8px; margin-bottom: 15px; }
 

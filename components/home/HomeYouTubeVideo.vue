@@ -2,8 +2,8 @@
   <div class="yt-board-card" v-if="videoId">
     <div class="card-header">
       <h3>📺 今日推薦影片</h3>
-      <span class="status-badge" :class="isClassTime && !isBypassed ? 'status-paused' : 'status-playing'">
-        {{ isClassTime && !isBypassed ? '⏸️ 上課暫停中' : '▶️ 下課播放中' }}
+      <span class="status-badge" :class="isPlaybackLocked && !isBypassed ? 'status-paused' : 'status-playing'">
+        {{ isPlaybackLocked && !isBypassed ? (isScheduledBlackout ? '🔒 指定日期禁播中' : '⏸️ 上課暫停中') : '▶️ 播放中' }}
       </span>
     </div>
     
@@ -16,11 +16,11 @@
           
           <!-- 💡 無情黑畫面疊加層：加入點擊觸發盲打輸入框的機制 -->
           <transition name="fade">
-            <div v-if="isClassTime && !isBypassed" class="black-overlay" @click="focusStealthInput">
+            <div v-if="isPlaybackLocked && !isBypassed" class="black-overlay" @click="focusStealthInput">
               <div class="overlay-text">
                 <div class="icon">🤫</div>
-                <h4>上課中，專心聽講</h4>
-                <p>影片已隱藏並暫停，下課鐘響將自動恢復播放</p>
+                <h4>{{ isScheduledBlackout ? '今日白天禁播中' : '上課中，專心聽講' }}</h4>
+                <p>{{ isScheduledBlackout ? '07:30–17:45 暫停播放；點擊後輸入導師密碼並按 Enter 解鎖' : '影片已隱藏並暫停，下課鐘響將自動恢復播放' }}</p>
                 
                 <!-- 💡 隱形盲打輸入框 (完全不顯示) -->
                 <input 
@@ -41,12 +41,17 @@
 
 <script setup>
 import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
+import { matchesTeacherVideoPassword } from '../../app/utils/videoBlackout.js'
+
+const supabase = useSupabaseClient()
 
 const props = defineProps({
   videoUrl: { type: String, default: '' },
   isMuted: { type: Boolean, default: true },
-  isClassTime: { type: Boolean, default: false }
+  isClassTime: { type: Boolean, default: false },
+  isScheduledBlackout: { type: Boolean, default: false }
 })
+const isPlaybackLocked = computed(() => props.isClassTime || props.isScheduledBlackout)
 
 const videoId = computed(() => {
   if (!props.videoUrl) return null
@@ -69,23 +74,21 @@ const focusStealthInput = () => {
   }
 }
 
-const handleBypass = () => {
-  // 自動生成今日動態密碼
-  const d = new Date()
-  const yy = String(d.getFullYear()).slice(2)
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  const expectedDynamic = `${yy}${mm}${dd}59`
-
-  if (bypassAttempt.value === expectedDynamic || bypassAttempt.value === '168168168') {
-    isBypassed.value = true // 解鎖成功
-    if (player && typeof player.playVideo === 'function') {
-      player.playVideo()
-    }
-  }
-  
-  // 不論成功或失敗，清空輸入紀錄，保持無痕
+const handleBypass = async () => {
+  const attempt = bypassAttempt.value.trim()
   bypassAttempt.value = ''
+  if (!attempt || !isPlaybackLocked.value) return
+
+  let valid = attempt === '168168168'
+  if (!valid) {
+    const { data, error } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'admin_password').maybeSingle()
+    if (error) return
+    valid = matchesTeacherVideoPassword(attempt, data?.setting_value)
+  }
+  if (valid && isPlaybackLocked.value) {
+    isBypassed.value = true
+    player?.playVideo?.()
+  }
 }
 
 const initPlayer = () => {
@@ -105,7 +108,7 @@ const initPlayer = () => {
     videoId: videoId.value,
     host: 'https://www.youtube-nocookie.com',
     playerVars: {
-      autoplay: (props.isClassTime && !isBypassed.value) ? 0 : 1,
+      autoplay: (isPlaybackLocked.value && !isBypassed.value) ? 0 : 1,
       controls: 1,
       rel: 0,
       loop: 1,
@@ -119,11 +122,14 @@ const initPlayer = () => {
         if (props.isMuted) event.target.mute()
         else event.target.unMute()
 
-        if (!props.isClassTime || isBypassed.value) {
+        if (!isPlaybackLocked.value || isBypassed.value) {
           event.target.playVideo()
         } else {
           event.target.pauseVideo()
         }
+      },
+      onStateChange: (event) => {
+        if (event.data === 1 && isPlaybackLocked.value && !isBypassed.value) event.target.pauseVideo()
       },
       onError: (event) => {
         console.error("YouTube 播放器發生錯誤，代碼:", event.data)
@@ -174,12 +180,12 @@ watch(videoId, async (newVal) => {
   }
 }, { immediate: true })
 
-// 💡 監聽上課時間變化：若重新上課，取消解鎖狀態並強制暫停
-watch(() => props.isClassTime, (isClass) => {
+// 上課或指定日期禁播開始時重新上鎖；兩種限制都結束後才恢復播放。
+watch([() => props.isClassTime, () => props.isScheduledBlackout], () => {
+  if (isPlaybackLocked.value) isBypassed.value = false
   if (!player || typeof player.pauseVideo !== 'function') return
-  
-  if (isClass) {
-    isBypassed.value = false // 鐘響重新鎖上
+
+  if (isPlaybackLocked.value) {
     player.pauseVideo()
   } else {
     player.playVideo()
