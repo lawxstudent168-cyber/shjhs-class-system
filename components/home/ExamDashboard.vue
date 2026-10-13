@@ -42,12 +42,32 @@
         <ExamLiveRow :exam-status="examStatus" :current-time="currentTime"
           :countdown-minutes="countdownMinutes" :countdown-text="countdownText" />
 
-        <!-- 💡 核心新增：前台讀取並展示「大考提醒事項」區塊 -->
-        <div class="exam-notes-display" v-if="examData.notes && examData.notes.length > 0">
+        <div class="exam-detail-tabs" role="tablist" aria-label="考試資訊">
+          <button role="tab" :aria-selected="detailTab === 'notes'" :class="{ active: detailTab === 'notes' }" @click="detailTab = 'notes'">⚠️ 考前提醒</button>
+          <button role="tab" :aria-selected="detailTab === 'seats'" :class="{ active: detailTab === 'seats' }" @click="detailTab = 'seats'">🪑 目前座位表</button>
+        </div>
+        <div v-if="detailTab === 'notes'" class="exam-notes-display" role="tabpanel">
           <h4 class="notes-title">⚠️ 考前提醒</h4>
-          <ul class="notes-list-preview">
+          <ul v-if="examData.notes?.length" class="notes-list-preview">
             <li v-for="(note, idx) in examData.notes" :key="'front-note-'+idx">{{ note }}</li>
           </ul>
+          <p v-else>目前沒有考前提醒。</p>
+        </div>
+        <div v-else class="exam-seats-display" role="tabpanel">
+          <div class="exam-seats-heading">
+            <strong>目前座位表（僅顯示座號）</strong>
+            <button @click="flipSeats = !flipSeats">上下顛倒</button>
+          </div>
+          <div v-if="seatingChart.seats?.length" class="exam-seats-layout" :class="{ 'is-flipped': Boolean(seatingChart.isRotated) !== flipSeats }">
+            <div class="exam-seat-grid">
+              <div v-for="(seat, index) in seatingChart.seats" :key="seat.id ?? index"
+                class="exam-seat" :class="{ 'is-hidden': seat.isHidden, 'is-leave': isSeatOnLeave(seat) }">
+                <span v-if="!seat.isHidden">{{ seat.seatNum }}</span>
+              </div>
+            </div>
+            <div class="exam-teacher-desk">講桌</div>
+          </div>
+          <p v-else>尚未儲存座位表。</p>
         </div>
 
       </div>
@@ -56,7 +76,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import ExamLiveRow from './ExamLiveRow.vue'
 import { summarizeExamAttendance } from '../../app/utils/examAttendance.js'
 const props = defineProps({
@@ -67,10 +87,18 @@ const props = defineProps({
   countdownText: { type: String, required: true },
   currentThemeStyles: { type: Object, required: true },
   allStudents: { type: Array, default: () => [] },
-  todayAttendances: { type: Array, default: () => [] }
+  todayAttendances: { type: Array, default: () => [] },
+  seatingChart: { type: Object, default: () => ({ seats: [], isRotated: false }) }
 })
 
 const attendanceSummary = computed(() => summarizeExamAttendance(props.allStudents, props.todayAttendances))
+const detailTab = ref('notes')
+const flipSeats = ref(false)
+const leaveSeatNumbers = computed(() => new Set(attendanceSummary.value.leaveSeats.map(value => Number(value))))
+const isSeatOnLeave = seat => {
+  const number = String(seat.seatNum ?? '').match(/\d+/)?.[0]
+  return number !== undefined && leaveSeatNumbers.value.has(Number(number))
+}
 defineEmits(['exit'])
 </script>
 
@@ -111,6 +139,21 @@ defineEmits(['exit'])
 .notes-title { font-size: calc(var(--ex-notes-size, 24px) + 5px); margin: 0 0 15px 0; color: var(--ex-danger); border-bottom: 1px dashed var(--ex-border); padding-bottom: 10px;}
 .notes-list-preview { margin: 0; padding-left: 30px; font-size: var(--ex-notes-size, 24px); line-height: 1.6; color: var(--ex-text); }
 .notes-list-preview li { margin-bottom: 8px; }
+.exam-detail-tabs { display: flex; gap: 8px; align-self: stretch; margin-top: 22px; }
+.exam-detail-tabs button { flex: 1; border: 1px solid var(--ex-border); border-radius: 8px; padding: 9px; background: var(--ex-bg); color: var(--ex-text); font-size: 1rem; cursor: pointer; }
+.exam-detail-tabs button.active { border-color: var(--ex-accent); color: var(--ex-title); font-weight: bold; box-shadow: inset 0 -3px var(--ex-accent); }
+.exam-notes-display { margin-top: 10px; }
+.exam-seats-display { width: 100%; margin-top: 10px; padding: 14px; box-sizing: border-box; border: 2px dashed var(--ex-border); border-radius: 12px; }
+.exam-seats-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.exam-seats-heading button { border: 1px solid var(--ex-border); border-radius: 6px; background: var(--ex-bg); color: var(--ex-text); padding: 5px 9px; cursor: pointer; white-space: nowrap; }
+.exam-seats-layout { width: 100%; transition: transform 0.25s ease; }
+.exam-seats-layout.is-flipped { transform: rotate(180deg); }
+.exam-seat-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
+.exam-seat { min-height: 42px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--ex-border); border-radius: 5px; font-size: clamp(14px, 1.35vw, 22px); font-weight: bold; background: var(--ex-bg); }
+.exam-seat.is-hidden { visibility: hidden; }
+.exam-seat.is-leave { background: #fee2e2; border: 2px solid #dc2626; color: #b91c1c; font-weight: 900; }
+.exam-teacher-desk { width: 34%; margin: 10px auto 0; padding: 5px; border: 2px solid var(--ex-border); border-radius: 6px; font-weight: bold; }
+.exam-seats-layout.is-flipped .exam-seat, .exam-seats-layout.is-flipped .exam-teacher-desk { transform: rotate(180deg); }
 
 @media (max-width: 1024px) {
   .exam-header { flex-direction: column; align-items: stretch; }

@@ -11,6 +11,7 @@
       :currentThemeStyles="currentThemeStyles"
       :allStudents="allStudents"
       :todayAttendances="todayAttendances"
+      :seatingChart="seatingChart"
       @exit="isExamModeView = false"
     />
 

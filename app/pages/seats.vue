@@ -75,10 +75,16 @@
           </button>
         </div>
         <div class="mode-actions">
-          <!-- 💡 新增：複製平常模式按鈕 (僅在非平常模式時顯示) -->
-          <button v-if="currentEditMode !== 'normal'" @click="copyFromNormalMode" class="btn-copy-normal">
-            📋 從「平常模式」複製配置
-          </button>
+          <label for="copy-mode-source">從其他模式複製：</label>
+          <select id="copy-mode-source" v-model="copySourceMode" class="mode-source-select">
+            <option value="">選擇來源模式</option>
+            <option v-for="m in modeDefs.filter(m => m.key !== currentEditMode)" :key="m.key" :value="m.key">{{ m.label }}</option>
+          </select>
+          <button @click="copyFromMode" :disabled="!copySourceMode" class="btn-copy-normal">📋 完整複製</button>
+          <button @click="exportCurrentMode('json')" class="btn-export-json">匯出此模式 JSON</button>
+          <button @click="exportCurrentMode('csv')" class="btn-export-csv">匯出此模式 CSV</button>
+          <button @click="modeFileInput?.click()" class="btn-import-mode">匯入此模式 CSV／JSON</button>
+          <input ref="modeFileInput" type="file" accept=".csv,.json,text/csv,application/json" class="visually-hidden" @change="importCurrentMode">
 
           <button v-if="activePublishedMode !== currentEditMode" @click="setAsPublished" class="btn-set-publish">
             🚩 將「{{ currentModeLabel }}」設為首頁顯示
@@ -278,6 +284,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { exportSeatingModeJson, exportSeatingModeCsv, importSeatingModeJson, importSeatingModeCsv } from '../utils/seatingModeFiles.js'
 const supabase = useSupabaseClient()
 
 const isLoggedIn = ref(false)
@@ -286,14 +293,18 @@ const passwordInput = ref('')
 const isSaving = ref(false)
 
 const modeDefs = [
-  { key: 'normal', label: '平常模式' },
-  { key: 'backup', label: '備用模式' },
+  { key: 'normal', label: '平常模式 A' },
+  { key: 'normalB', label: '平常模式 B' },
+  { key: 'backup', label: '備用模式 A' },
+  { key: 'backupB', label: '備用模式 B' },
   { key: 'exam', label: '月考模式' },
   { key: 'mock', label: '模擬考模式' }
 ]
 
 const currentEditMode = ref('normal')
 const activePublishedMode = ref('normal')
+const copySourceMode = ref('')
+const modeFileInput = ref(null)
 const currentModeLabel = computed(() => modeDefs.find(m => m.key === currentEditMode.value)?.label || '')
 
 // 目前畫面編輯器中的變數
@@ -310,12 +321,15 @@ const defaultPrintData = (title) => ({ title: title, count: 30, date: new Date()
 const generateDefaultMode = (title) => ({ seats: initSeats(), isRotated: false, isVisible: true, settings: defaultSeatSettings(), printData: defaultPrintData(title) })
 
 // 存放所有模式的記憶體池
-const modesData = ref({
-  normal: generateDefaultMode('班級座位表 (平常)'),
-  backup: generateDefaultMode('班級備用座位表'),
+const defaultModes = () => ({
+  normal: generateDefaultMode('班級座位表 (平常 A)'),
+  normalB: generateDefaultMode('班級座位表 (平常 B)'),
+  backup: generateDefaultMode('班級備用座位表 (A)'),
+  backupB: generateDefaultMode('班級備用座位表 (B)'),
   exam: generateDefaultMode('班級月考座位表'),
   mock: generateDefaultMode('班級模擬考座位表')
 })
+const modesData = ref(defaultModes())
 
 const showPrintModal = ref(false)
 const isSavingPrint = ref(false)
@@ -370,12 +384,13 @@ const syncEditorToMemory = () => {
 }
 
 const loadMemoryToEditor = (modeKey) => {
-  const data = modesData.value[modeKey]
-  seatsList.value = JSON.parse(JSON.stringify(data.seats))
+  const defaults = defaultModes()[modeKey]
+  const data = { ...defaults, ...modesData.value[modeKey] }
+  seatsList.value = JSON.parse(JSON.stringify(data.seats || defaults.seats))
   isRotated.value = data.isRotated
   isVisibleOnIndex.value = data.isVisible
-  seatSettings.value = JSON.parse(JSON.stringify(data.settings))
-  printData.value = JSON.parse(JSON.stringify(data.printData))
+  seatSettings.value = { ...defaults.settings, ...data.settings }
+  printData.value = { ...defaults.printData, ...data.printData }
   currentEditMode.value = modeKey
 }
 
@@ -383,26 +398,56 @@ const switchMode = (newModeKey) => {
   if (newModeKey === currentEditMode.value) return
   syncEditorToMemory() // 先把現在編輯的存起來
   loadMemoryToEditor(newModeKey) // 載入新模式
+  copySourceMode.value = ''
 }
 
 const setAsPublished = () => {
   activePublishedMode.value = currentEditMode.value
 }
 
-// 💡 新增：複製平常模式按鈕邏輯
-const copyFromNormalMode = () => {
-  if (!confirm(`確定要從「平常模式」複製所有座位、姓名與設定嗎？\n這將會覆蓋您目前在【${currentModeLabel.value}】的排版！`)) return;
-  
-  // 1. 深度複製平常模式的資料
-  const normalData = JSON.parse(JSON.stringify(modesData.value['normal']));
-  
-  // 2. 替換掉當前模式在記憶體中的資料
-  modesData.value[currentEditMode.value] = normalData;
-  
-  // 3. 重新把記憶體的資料渲染到畫面上
-  loadMemoryToEditor(currentEditMode.value);
-  
-  alert('✅ 已成功複製「平常模式」的配置！\n請您繼續微調，完成後記得點擊「儲存所有模式」。');
+const copyFromMode = () => {
+  const source = copySourceMode.value
+  if (!source || source === currentEditMode.value || !modesData.value[source]) return
+  const sourceLabel = modeDefs.find(mode => mode.key === source)?.label
+  if (!confirm(`確定從「${sourceLabel}」完整複製座位、方向、顯示設定、文字樣式與列印設定到「${currentModeLabel.value}」嗎？目前模式的編輯內容將被覆蓋。`)) return
+  syncEditorToMemory()
+  modesData.value[currentEditMode.value] = JSON.parse(JSON.stringify(modesData.value[source]))
+  loadMemoryToEditor(currentEditMode.value)
+  alert('已複製。請按「儲存所有模式」才會寫入資料庫。')
+}
+
+const downloadModeFile = (content, filename, mime) => {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+const exportCurrentMode = type => {
+  syncEditorToMemory()
+  const layout = modesData.value[currentEditMode.value]
+  try {
+    const content = type === 'json' ? exportSeatingModeJson(layout, currentEditMode.value) : exportSeatingModeCsv(layout)
+    downloadModeFile(content, `seating_${currentEditMode.value}.${type}`, type === 'json' ? 'application/json' : 'text/csv;charset=utf-8')
+  } catch (error) { alert(`匯出失敗：${error.message}`) }
+}
+
+const importCurrentMode = async event => {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  try {
+    const content = await file.text()
+    const layout = file.name.toLowerCase().endsWith('.json') ? importSeatingModeJson(content)
+      : file.name.toLowerCase().endsWith('.csv') ? importSeatingModeCsv(content) : null
+    if (!layout) throw new Error('請選擇 CSV 或 JSON 檔案')
+    if (!confirm(`匯入會覆蓋「${currentModeLabel.value}」目前編輯的完整配置，確定繼續嗎？`)) return
+    modesData.value[currentEditMode.value] = layout
+    loadMemoryToEditor(currentEditMode.value)
+    alert('匯入完成。請按「儲存所有模式」才會寫入資料庫。')
+  } catch (error) { alert(`匯入失敗：${error.message}`) }
 }
 
 // === API 與同步 ===
@@ -431,8 +476,8 @@ const fetchLayout = async () => {
   if (data?.setting_value) {
     const val = data.setting_value
     if (val.modes) {
-      modesData.value = val.modes
-      activePublishedMode.value = val.activeMode || 'normal'
+      modesData.value = { ...defaultModes(), ...Object.fromEntries(modeDefs.filter(mode => val.modes[mode.key]).map(mode => [mode.key, val.modes[mode.key]])) }
+      activePublishedMode.value = modesData.value[val.activeMode] ? (val.activeMode || 'normal') : 'normal'
     } else {
       const legacySeats = (val.seats || initSeats()).map(seat => {
         if (seat.content !== undefined) {
@@ -470,8 +515,10 @@ const saveLayout = async () => {
       modes: modesData.value                 
     }
     
-    await supabase.from('system_settings').upsert({ setting_key: 'seating_chart_data', setting_value: payload }, { onConflict: 'setting_key' })
-    await supabase.from('seating_records').upsert({ record_date: todayISO, layout_data: payload }, { onConflict: 'record_date' })
+    const { error: settingsError } = await supabase.from('system_settings').upsert({ setting_key: 'seating_chart_data', setting_value: payload }, { onConflict: 'setting_key' })
+    if (settingsError) throw settingsError
+    const { error: historyError } = await supabase.from('seating_records').upsert({ record_date: todayISO, layout_data: payload }, { onConflict: 'record_date' })
+    if (historyError) throw historyError
 
     const activeLabel = modeDefs.find(m => m.key === activePublishedMode.value).label
     alert(`✅ 所有座位模式已成功儲存！\n首頁目前已套用：「${activeLabel}」`)
@@ -586,8 +633,12 @@ const exportHistory = async (type) => {
 .published-badge { position: absolute; top: -10px; right: -10px; background: #ef4444; color: white; font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4); border: 2px solid white;}
 
 .mode-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.mode-source-select { padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .btn-copy-normal { background: #6366f1; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: 0.2s;}
 .btn-copy-normal:hover { background: #4f46e5; }
+.btn-copy-normal:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-import-mode { background: #0f766e; color: white; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; }
 .btn-set-publish { background: #f59e0b; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: 0.2s; }
 .btn-set-publish:hover { background: #d97706; }
 .status-text-success { font-weight: bold; color: #10b981; font-size: 1.05rem; display: flex; align-items: center; gap: 5px;}
