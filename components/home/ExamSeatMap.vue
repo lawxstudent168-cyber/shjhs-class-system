@@ -2,7 +2,7 @@
   <div class="exam-seats-display" :class="{ compact }">
     <div class="exam-seats-heading">
       <strong>目前座位表（僅顯示座號）</strong>
-      <button @click="flipSeats = !flipSeats">上下顛倒</button>
+      <button type="button" @click="flipSeats = !flipSeats">轉180度</button>
     </div>
     <div v-if="seatingChart.seats?.length" class="exam-seats-layout" :class="{ 'is-flipped': Boolean(seatingChart.isRotated) !== flipSeats }">
       <div class="exam-seat-grid">

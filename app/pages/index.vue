@@ -150,6 +150,10 @@
               :todayVideoUrl="todayVideoUrl"
               :youtubeIsMuted="youtubeIsMuted"
               :isVideoBlackout="isVideoBlackout"
+              :isIpBrownlisted="isIpBrownlisted"
+              :seatingChart="seatingChart"
+              :allStudents="allStudents"
+              :todayAttendances="todayAttendances"
             />
             
           </div>

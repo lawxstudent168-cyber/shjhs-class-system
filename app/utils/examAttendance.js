@@ -1,3 +1,12 @@
+export const examStatusPalette = {
+  '--ex-status-present-bg': '#dcfce7', '--ex-status-present-text': '#166534', '--ex-status-present-border': '#86efac',
+  '--ex-status-leave-bg': '#fee2e2', '--ex-status-leave-text': '#b91c1c', '--ex-status-leave-border': '#dc2626',
+  '--ex-status-late-leave-bg': '#ffe4e6', '--ex-status-late-leave-text': '#9f1239', '--ex-status-late-leave-border': '#e11d48',
+  '--ex-status-early-leave-bg': '#fff1f2', '--ex-status-early-leave-text': '#9f1239', '--ex-status-early-leave-border': '#fb7185',
+  '--ex-status-late-bg': '#dbeafe', '--ex-status-late-text': '#1d4ed8', '--ex-status-late-border': '#93c5fd',
+  '--ex-status-absent-bg': '#fecaca', '--ex-status-absent-text': '#7f1d1d', '--ex-status-absent-border': '#b91c1c'
+}
+
 export function examAttendanceKind(status) {
   if (status === '已到') return 'present'
   if (status === '請假' || status === '全天請假') return 'leave'

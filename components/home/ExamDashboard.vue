@@ -1,5 +1,5 @@
 <template>
-  <div class="exam-dashboard" :class="{ 'is-preview': preview, 'is-focused': isFocusedExam }" :style="currentThemeStyles">
+  <div class="exam-dashboard" :class="{ 'is-preview': preview, 'is-focused': isFocusedExam }" :style="[currentThemeStyles, examStatusPalette]">
     <button v-if="!preview" @click="$emit('exit')" class="exit-exam-btn" title="結束大考模式">✖ 結束</button>
     
     <div class="exam-header">
@@ -65,7 +65,7 @@ import { computed, ref } from 'vue'
 import ExamLiveRow from './ExamLiveRow.vue'
 import ExamSeatMap from './ExamSeatMap.vue'
 import ExamNotes from './ExamNotes.vue'
-import { examSeatStatusByNumber, summarizeExamAttendance } from '../../app/utils/examAttendance.js'
+import { examSeatStatusByNumber, examStatusPalette, summarizeExamAttendance } from '../../app/utils/examAttendance.js'
 const props = defineProps({
   examData: { type: Object, required: true },
   examStatus: { type: Object, required: true },
@@ -87,7 +87,7 @@ defineEmits(['exit'])
 </script>
 
 <style scoped>
-.exam-dashboard { --ex-status-present-bg: #dcfce7; --ex-status-present-text: #166534; --ex-status-present-border: #86efac; --ex-status-leave-bg: #fee2e2; --ex-status-leave-text: #b91c1c; --ex-status-leave-border: #dc2626; --ex-status-late-leave-bg: #ffe4e6; --ex-status-late-leave-text: #9f1239; --ex-status-late-leave-border: #e11d48; --ex-status-early-leave-bg: #fff1f2; --ex-status-early-leave-text: #9f1239; --ex-status-early-leave-border: #fb7185; --ex-status-late-bg: #dbeafe; --ex-status-late-text: #1d4ed8; --ex-status-late-border: #93c5fd; --ex-status-absent-bg: #fecaca; --ex-status-absent-text: #7f1d1d; --ex-status-absent-border: #b91c1c; background-color: var(--ex-bg); color: var(--ex-text); min-height: 100vh; padding: 28px 30px 20px; display: flex; flex-direction: column; position: relative; align-items: stretch; transition: background-color 0.5s ease;}
+.exam-dashboard { background-color: var(--ex-bg); color: var(--ex-text); min-height: 100vh; padding: 28px 30px 20px; display: flex; flex-direction: column; position: relative; align-items: stretch; transition: background-color 0.5s ease;}
 .exit-exam-btn { position: fixed; top: 4px; right: 12px; background: var(--ex-panel-bg); border: 1px solid var(--ex-border); color: var(--ex-text); padding: 3px 8px; border-radius: 7px; cursor: pointer; font-size: 0.75rem; line-height: 1; opacity: 0.65; transition: opacity 0.2s; z-index: 50; }
 .exit-exam-btn:hover, .exit-exam-btn:focus-visible { opacity: 1; }
 .exam-header { display: flex; align-items: center; gap: 18px; min-width: 0; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid var(--ex-border); }
