@@ -4,7 +4,7 @@
     <BroadcastWidget :isIpBrownlisted="isIpBrownlisted" />
     <MarqueeWidget :marqueeData="marqueeSettings" />
 
-    <div class="top-status-bar">
+    <div v-show="!isSmallSeatMapVisible" class="top-status-bar">
       <div class="clock-date-group">
         <div class="date-display" :style="{ fontSize: (clockConfig?.dateSize || 18) + 'px' }">
           {{ currentDateStr }}
@@ -30,6 +30,9 @@
       </div>
       <WeatherWidget />
     </div>
+    <div v-if="isSmallSeatMapVisible" id="homepage-small-seat-map" class="small-seat-cover" :style="examStatusPalette">
+      <ExamSeatMap :seating-chart="seatingChart" :status-by-seat="seatStatusByNumber" compact />
+    </div>
 
     <!-- 💡 加入 mobile-hide -->
     <div v-if="isButtonsCollapsed" class="floating-btn-container btn-pos mobile-hide" @click="isButtonsCollapsed = false" title="展開功能選單">
@@ -53,7 +56,6 @@
         :isIpBrownlisted="isIpBrownlisted"
         :examData="examData"
         :indexButtonSettings="indexButtonSettings"
-        :isWikiImageVisible="isWikiImageVisible"
         :isScheduleButtonVisible="isScheduleButtonVisible"
         :seatingChart="seatingChart"
         :showSeatingChartLocal="showSeatingChartLocal"
@@ -74,12 +76,14 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import BroadcastWidget from './BroadcastWidget.vue'
 import MarqueeWidget from './MarqueeWidget.vue'
 import ClockWidget from './ClockWidget.vue'
 import HomeActionButtons from './HomeActionButtons.vue'
 import WeatherWidget from './WeatherWidget.vue'
+import ExamSeatMap from './ExamSeatMap.vue'
+import { examSeatStatusByNumber, examStatusPalette } from '../../app/utils/examAttendance.js'
 // 💡 匯入 Nuxt 內建的路由跳轉功能
 import { navigateTo } from '#app' 
 
@@ -94,11 +98,12 @@ const props = defineProps({
   isIpBrownlisted: Boolean,
   examData: Object,
   indexButtonSettings: { type: Object, default: () => ({}) },
-  isWikiImageVisible: Boolean,
   isScheduleButtonVisible: Boolean,
   seatingChart: Object,
   showSeatingChartLocal: Boolean,
   showSmallSeatMap: Boolean,
+  allStudents: { type: Array, default: () => [] },
+  todayAttendances: { type: Array, default: () => [] },
   hygieneData: Object,
   showHygieneLocal: Boolean,
   isHistoryVisibleOnIndex: Boolean,
@@ -108,6 +113,8 @@ const props = defineProps({
 defineEmits(['enterExam', 'openLargeSchedule', 'openPwd', 'update:showSeatingChartLocal', 'update:showSmallSeatMap', 'update:showHygieneLocal'])
 
 const isButtonsCollapsed = ref(false)
+const isSmallSeatMapVisible = computed(() => props.isIpBrownlisted && props.indexButtonSettings.smallSeatMap && props.showSmallSeatMap)
+const seatStatusByNumber = computed(() => examSeatStatusByNumber(props.allStudents, props.todayAttendances))
 
 // 💡 特務級後台解鎖邏輯
 const stealthAdminInput = ref(null)
@@ -165,6 +172,7 @@ onUnmounted(() => {
 <style scoped>
 .control-card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; text-align: center; }
 .top-status-bar { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; margin-bottom: 25px; }
+.small-seat-cover { --ex-border: #cbd5e1; --ex-bg: #f8fafc; --ex-text: #334155; --ex-seat-number-size: 18px; width: 100%; margin-bottom: 25px; padding: 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; }
 
 .clock-date-group { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .date-display { font-weight: 900; color: #475569; letter-spacing: 2px; }

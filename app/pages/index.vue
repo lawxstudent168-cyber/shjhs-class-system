@@ -67,11 +67,12 @@
               :isIpBrownlisted="isIpBrownlisted"
               :examData="examData"
               :indexButtonSettings="indexButtonSettings"
-              :isWikiImageVisible="isWikiImageVisible"
               :isScheduleButtonVisible="isScheduleButtonVisible"
               :seatingChart="seatingChart"
               :showSeatingChartLocal="showSeatingChartLocal"
               :showSmallSeatMap="showSmallSeatMap"
+              :allStudents="allStudents"
+              :todayAttendances="todayAttendances"
               :hygieneData="hygieneData"
               :showHygieneLocal="showHygieneLocal"
               :isHistoryVisibleOnIndex="isHistoryVisibleOnIndex"
@@ -153,11 +154,6 @@
               :todayVideoUrl="todayVideoUrl"
               :youtubeIsMuted="youtubeIsMuted"
               :isVideoBlackout="isVideoBlackout"
-              :showSmallSeatMap="showSmallSeatMap && indexButtonSettings.smallSeatMap"
-              :isIpBrownlisted="isIpBrownlisted"
-              :seatingChart="seatingChart"
-              :allStudents="allStudents"
-              :todayAttendances="todayAttendances"
             />
             
           </div>
@@ -308,7 +304,6 @@ const classNotesRangeDisplay = computed(() => `${classNotesTodayISO.value} 起 7
 // 以下是畫面專屬的 computed 與行為邏輯
 // ==============
 const activeGoodArticle = computed(() => goodArticles.value.find(a => a.is_published === true) || null)
-const isWikiImageVisible = computed(() => indexModulesConfig.value.some(module => module.id === 'wikiImage' && module.isVisible))
 const todayEnglishSongUrl = computed(() => englishSongSchedule.value[new Date(nowTick.value).getDay()] || '')
 const isEnglishSongVisible = computed(() => englishSongSchedule.value.isVisible !== false)
 const todayVideoUrl = computed(() => youtubeSchedule.value[new Date(nowTick.value).getDay()] || '')

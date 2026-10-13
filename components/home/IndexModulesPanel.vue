@@ -3,14 +3,7 @@
     <!-- 💡 根據後台設定與動態洗牌邏輯，依序渲染模組 -->
     <template v-for="mod in displayModules" :key="mod.id">
       
-      <div v-if="mod.id === 'wikiImage' && mod.isVisible" class="wiki-image-section">
-        <template v-if="isIpBrownlisted">
-          <div v-if="showSmallSeatMap" id="homepage-small-seat-map" class="small-seat-map" :style="examStatusPalette">
-            <ExamSeatMap :seating-chart="seatingChart" :status-by-seat="seatStatusByNumber" compact />
-          </div>
-        </template>
-        <WikiDailyImage />
-      </div>
+      <WikiDailyImage v-if="mod.id === 'wikiImage' && mod.isVisible" />
       
       <WikiOnThisDay v-if="mod.id === 'wikiOtd' && mod.isVisible" />
       
@@ -43,8 +36,6 @@ import HomeYouTubeVideo from '~~/components/home/HomeYouTubeVideo.vue'
 import HomeFoxNews from '~~/components/home/HomeFoxNews.vue'
 import HomeCnnNews from '~~/components/home/HomeCnnNews.vue'
 import HomeAbcNews from '~~/components/home/HomeAbcNews.vue'
-import ExamSeatMap from '~~/components/home/ExamSeatMap.vue'
-import { examSeatStatusByNumber, examStatusPalette } from '../../app/utils/examAttendance.js'
 
 const props = defineProps({
   indexModulesConfig: { type: Array, default: () => [] },
@@ -52,15 +43,8 @@ const props = defineProps({
   isClassTime: { type: Boolean, default: false },
   todayVideoUrl: { type: String, default: '' },
   youtubeIsMuted: { type: Boolean, default: true },
-  isVideoBlackout: { type: Boolean, default: false },
-  isIpBrownlisted: { type: Boolean, default: false },
-  showSmallSeatMap: { type: Boolean, default: false },
-  seatingChart: { type: Object, default: () => ({ seats: [], isRotated: false }) },
-  allStudents: { type: Array, default: () => [] },
-  todayAttendances: { type: Array, default: () => [] }
+  isVideoBlackout: { type: Boolean, default: false }
 })
-
-const seatStatusByNumber = computed(() => examSeatStatusByNumber(props.allStudents, props.todayAttendances))
 
 // 💡 動態重組模組順序
 const displayModules = computed(() => {
@@ -87,6 +71,4 @@ const displayModules = computed(() => {
   flex-direction: column;
   width: 100%;
 }
-.wiki-image-section { width: 100%; }
-.small-seat-map { --ex-border: #cbd5e1; --ex-bg: #f8fafc; --ex-text: #334155; --ex-seat-number-size: 18px; margin-top: 20px; padding: 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; }
 </style>
