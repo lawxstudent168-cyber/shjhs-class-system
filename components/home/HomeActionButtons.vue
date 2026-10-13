@@ -30,32 +30,37 @@
       
       <NuxtLink v-if="indexButtonSettings.parentLeave" to="/leave-application" class="btn btn-teal-light">📝 家長代學生請假</NuxtLink>
       
-      <button v-if="isScheduleButtonVisible" @click="$emit('openLargeSchedule')" class="btn btn-lime">🗓️ 顯示班級大課表</button>
+      <button v-if="isScheduleButtonVisible && indexButtonSettings.schedule" @click="$emit('openLargeSchedule')" class="btn btn-lime">🗓️ 顯示班級大課表</button>
 
       <NuxtLink v-if="indexButtonSettings.assignments" to="/assignments" class="btn btn-purple">📚 作業管理</NuxtLink>
       <NuxtLink v-if="indexButtonSettings.discipline" to="/discipline" class="btn btn-dark-blue">⚖️ 秩序管理</NuxtLink>
       <NuxtLink v-if="indexButtonSettings.hygiene" to="/hygiene" class="btn btn-cyan">🧹 衛生管理</NuxtLink>            
       <NuxtLink v-if="indexButtonSettings.seats" to="/seats" class="btn btn-seat">🪑 座位管理</NuxtLink>
-      <NuxtLink v-if="indexButtonSettings.schedule" to="/schedule" class="btn btn-amber">⚙️ 課表管理</NuxtLink>
+      <NuxtLink v-if="indexButtonSettings.manageSchedule" to="/schedule" class="btn btn-amber">⚙️ 課表管理</NuxtLink>
 
       <!-- 💡 修正：直接使用 NuxtLink 導向 pages/teacher-broadcast.vue -->
-      <NuxtLink v-if="indexButtonSettings.broadcast !== false" to="/teacher-broadcast" class="btn btn-violet">📢 教師廣播站</NuxtLink>
+      <NuxtLink v-if="indexButtonSettings.broadcast" to="/teacher-broadcast" class="btn btn-violet">📢 教師廣播站</NuxtLink>
 
       <NuxtLink v-if="indexButtonSettings.exams" to="/exams" class="btn btn-rose">📝 大考管理</NuxtLink>
       <button v-if="indexButtonSettings.emergency" @click="$emit('openPwd', 'emergency')" class="btn btn-red">🚨 緊急通知</button>
       <NuxtLink v-if="indexButtonSettings.admin" to="/admin" class="btn btn-dark">⚙️ 後台</NuxtLink>
       
-      <button v-if="isIpBrownlisted && seatingChart.isVisible && indexButtonSettings.seats" 
+      <button v-if="isIpBrownlisted && seatingChart.isVisible && indexButtonSettings.showSeats"
               @click="$emit('update:showSeatingChartLocal', !showSeatingChartLocal)" class="btn btn-indigo">
         {{ showSeatingChartLocal ? '🙈 隱藏教室座位表' : '👀 顯示教室座位表' }}
       </button>
+      <button v-if="isIpBrownlisted && isWikiImageVisible && indexButtonSettings.smallSeatMap"
+              @click="$emit('update:showSmallSeatMap', !showSmallSeatMap)" class="btn btn-indigo"
+              :aria-expanded="showSmallSeatMap" aria-controls="homepage-small-seat-map">
+        {{ showSmallSeatMap ? '🙈 隱藏小座位表' : '👀 顯示小座位表' }}
+      </button>
       
-      <button v-if="isIpBrownlisted && hygieneData.isVisibleOnIndex && indexButtonSettings.hygiene" 
+      <button v-if="isIpBrownlisted && hygieneData.isVisibleOnIndex && indexButtonSettings.showHygiene"
               @click="$emit('update:showHygieneLocal', !showHygieneLocal)" class="btn btn-sky">
         {{ showHygieneLocal ? '🙈 隱藏衛生工作' : '🧹 顯示衛生工作' }}
       </button>
       
-      <NuxtLink v-if="isHistoryVisibleOnIndex" to="/history" class="btn btn-pink">📅 查詢近期聯絡簿</NuxtLink>
+      <NuxtLink v-if="isHistoryVisibleOnIndex && indexButtonSettings.contactHistory" to="/history" class="btn btn-pink">📅 查詢近期聯絡簿</NuxtLink>
     </div>
   </div>
 </template>
@@ -67,16 +72,18 @@ const props = defineProps({
   isIpBrownlisted: Boolean,
   examData: Object,
   indexButtonSettings: { type: Object, default: () => ({}) },
+  isWikiImageVisible: Boolean,
   isScheduleButtonVisible: Boolean,
   seatingChart: Object,
   showSeatingChartLocal: Boolean,
+  showSmallSeatMap: Boolean,
   hygieneData: Object,
   showHygieneLocal: Boolean,
   isHistoryVisibleOnIndex: Boolean
 })
 
 // 💡 修正：移除多餘的 openBroadcast 事件
-defineEmits(['enterExam', 'openLargeSchedule', 'openPwd', 'update:showSeatingChartLocal', 'update:showHygieneLocal'])
+defineEmits(['enterExam', 'openLargeSchedule', 'openPwd', 'update:showSeatingChartLocal', 'update:showSmallSeatMap', 'update:showHygieneLocal'])
 </script>
 
 <style scoped>

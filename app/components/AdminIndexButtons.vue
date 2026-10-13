@@ -27,6 +27,9 @@
       <label class="toggle-item" :class="{ 'is-disabled': !settings.seats }">
         <input type="checkbox" v-model="settings.seats"> 🪑 座位管理
       </label>
+      <label class="toggle-item" :class="{ 'is-disabled': !settings.smallSeatMap }">
+        <input type="checkbox" v-model="settings.smallSeatMap"> 👀 顯示小座位表
+      </label>
       <label class="toggle-item" :class="{ 'is-disabled': !settings.schedule }">
         <input type="checkbox" v-model="settings.schedule"> 🗓️ 課表管理
       </label>
@@ -59,7 +62,7 @@ const supabase = useSupabaseClient()
 const isSaving = ref(false)
 const settings = ref({
   parentBind: true, parentMsg: true, studentMsg: true, assignments: true, 
-  discipline: true, hygiene: true, seats: true, schedule: true, exams: true, emergency: true, admin: true
+  discipline: true, hygiene: true, seats: true, smallSeatMap: true, schedule: true, exams: true, emergency: true, admin: true
 })
 
 onMounted(async () => {

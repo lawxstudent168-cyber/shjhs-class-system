@@ -5,10 +5,6 @@
       
       <div v-if="mod.id === 'wikiImage' && mod.isVisible" class="wiki-image-section">
         <template v-if="isIpBrownlisted">
-          <button type="button" class="small-seat-toggle" :aria-expanded="showSmallSeatMap"
-            aria-controls="homepage-small-seat-map" @click="showSmallSeatMap = !showSmallSeatMap">
-            {{ showSmallSeatMap ? '隱藏小座位表' : '顯示小座位表' }}
-          </button>
           <div v-if="showSmallSeatMap" id="homepage-small-seat-map" class="small-seat-map" :style="examStatusPalette">
             <ExamSeatMap :seating-chart="seatingChart" :status-by-seat="seatStatusByNumber" compact />
           </div>
@@ -38,7 +34,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 
 // 💡 集中管理引入，保持 index.vue 乾淨
 import WikiDailyImage from '~~/components/home/WikiDailyImage.vue'
@@ -58,12 +54,12 @@ const props = defineProps({
   youtubeIsMuted: { type: Boolean, default: true },
   isVideoBlackout: { type: Boolean, default: false },
   isIpBrownlisted: { type: Boolean, default: false },
+  showSmallSeatMap: { type: Boolean, default: false },
   seatingChart: { type: Object, default: () => ({ seats: [], isRotated: false }) },
   allStudents: { type: Array, default: () => [] },
   todayAttendances: { type: Array, default: () => [] }
 })
 
-const showSmallSeatMap = ref(false)
 const seatStatusByNumber = computed(() => examSeatStatusByNumber(props.allStudents, props.todayAttendances))
 
 // 💡 動態重組模組順序
@@ -92,7 +88,5 @@ const displayModules = computed(() => {
   width: 100%;
 }
 .wiki-image-section { width: 100%; }
-.small-seat-toggle { margin-top: 20px; padding: 8px 14px; border: 1px solid #94a3b8; border-radius: 8px; background: #f8fafc; color: #1e293b; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
-.small-seat-toggle:hover, .small-seat-toggle:focus-visible { background: #e2e8f0; }
-.small-seat-map { --ex-border: #cbd5e1; --ex-bg: #f8fafc; --ex-text: #334155; --ex-seat-number-size: 18px; margin-top: 8px; padding: 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; }
+.small-seat-map { --ex-border: #cbd5e1; --ex-bg: #f8fafc; --ex-text: #334155; --ex-seat-number-size: 18px; margin-top: 20px; padding: 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; }
 </style>

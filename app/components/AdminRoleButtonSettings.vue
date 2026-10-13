@@ -44,55 +44,18 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { homeButtonList, defaultRoleButtonSettings, normalizeRoleButtonSettings } from '../utils/homeButtonSettings.js'
 const supabase = useSupabaseClient()
 
 const isSaving = ref(false)
 
-// 💡 補齊首頁的 16 個按鈕 (加入 broadcast 教師廣播站)
-const buttonList = [
-  { key: 'parentBind', label: '👨‍👩‍👦 綁定' },
-  { key: 'parentMsg', label: '💬 家長私訊' },
-  { key: 'studentMsg', label: '💬 學生私訊' },
-  { key: 'parentLeave', label: '📝 家長代學生請假' },
-  { key: 'schedule', label: '📅 顯示班級大課表' },
-  { key: 'assignments', label: '📚 作業管理' },
-  { key: 'discipline', label: '⚖️ 秩序管理' },
-  { key: 'hygiene', label: '🧹 衛生管理' },
-  { key: 'seats', label: '🪑 座位管理' },
-  { key: 'manageSchedule', label: '⚙️ 課表管理' },
-  { key: 'broadcast', label: '📢 教師廣播站' }, // 💡 新增廣播按鈕控制
-  { key: 'exams', label: '📝 大考管理' },
-  { key: 'emergency', label: '🚨 緊急通知' },
-  { key: 'admin', label: '⚙️ 後台' },
-  { key: 'showSeats', label: '👀 顯示教室座位表' },
-  { key: 'showHygiene', label: '🧹 顯示衛生工作' },
-  { key: 'contactHistory', label: '📅 查詢近期聯絡簿' }
-]
-
-// 💡 系統預設值 (加入 broadcast 屬性，預設導師與科任老師為 true)
-const defaultSettings = {
-  anonymous: { parentBind: true, parentMsg: true, studentMsg: true, parentLeave: true, schedule: true, assignments: true, discipline: true, hygiene: true, seats: true, manageSchedule: false, exams: false, emergency: true, admin: false, showSeats: false, showHygiene: false, contactHistory: false, broadcast: false },
-  classroom: { parentBind: false, parentMsg: false, studentMsg: false, parentLeave: false, schedule: true, assignments: true, discipline: true, hygiene: true, seats: true, manageSchedule: false, exams: false, emergency: true, admin: false, showSeats: true, showHygiene: true, contactHistory: true, broadcast: false },
-  parent: { parentBind: false, parentMsg: true, studentMsg: false, parentLeave: true, schedule: true, assignments: true, discipline: true, hygiene: true, seats: true, manageSchedule: false, exams: false, emergency: true, admin: false, showSeats: false, showHygiene: false, contactHistory: true, broadcast: false },
-  student: { parentBind: false, parentMsg: false, studentMsg: true, parentLeave: false, schedule: true, assignments: true, discipline: true, hygiene: true, seats: true, manageSchedule: false, exams: false, emergency: true, admin: false, showSeats: false, showHygiene: false, contactHistory: true, broadcast: false },
-  subject_teacher: { parentBind: false, parentMsg: false, studentMsg: false, parentLeave: false, schedule: true, assignments: true, discipline: true, hygiene: true, seats: true, manageSchedule: false, exams: false, emergency: true, admin: false, showSeats: true, showHygiene: true, contactHistory: true, broadcast: true },
-  teacher: { parentBind: true, parentMsg: true, studentMsg: true, parentLeave: true, schedule: true, assignments: true, discipline: true, hygiene: true, seats: true, manageSchedule: true, exams: true, emergency: true, admin: true, showSeats: true, showHygiene: true, contactHistory: true, broadcast: true }
-}
-
-const settings = ref(JSON.parse(JSON.stringify(defaultSettings)))
+const buttonList = homeButtonList
+const settings = ref(normalizeRoleButtonSettings())
 
 const fetchSettings = async () => {
   const { data } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'role_button_settings').maybeSingle()
   if (data && data.setting_value) {
-    // 確保新增的按鈕 key 不會 undefined
-    const loadedSettings = data.setting_value
-    for (const role in defaultSettings) {
-      if (!loadedSettings[role]) loadedSettings[role] = defaultSettings[role]
-      for (const key of buttonList.map(b => b.key)) {
-        if (loadedSettings[role][key] === undefined) loadedSettings[role][key] = defaultSettings[role][key]
-      }
-    }
-    settings.value = loadedSettings
+    settings.value = normalizeRoleButtonSettings(data.setting_value)
   }
 }
 
@@ -101,7 +64,7 @@ onMounted(() => fetchSettings())
 const saveSettings = async () => {
   isSaving.value = true
   // 強制確保導師擁有全部權限
-  buttonList.forEach(b => settings.value.teacher[b.key] = true)
+  settings.value.teacher = { ...defaultRoleButtonSettings.teacher }
   
   const { error } = await supabase.from('system_settings').upsert({
     setting_key: 'role_button_settings',

@@ -53,9 +53,11 @@
         :isIpBrownlisted="isIpBrownlisted"
         :examData="examData"
         :indexButtonSettings="indexButtonSettings"
+        :isWikiImageVisible="isWikiImageVisible"
         :isScheduleButtonVisible="isScheduleButtonVisible"
         :seatingChart="seatingChart"
         :showSeatingChartLocal="showSeatingChartLocal"
+        :showSmallSeatMap="showSmallSeatMap"
         :hygieneData="hygieneData"
         :showHygieneLocal="showHygieneLocal"
         :isHistoryVisibleOnIndex="isHistoryVisibleOnIndex"
@@ -63,6 +65,7 @@
         @openLargeSchedule="$emit('openLargeSchedule')"
         @openPwd="(val) => $emit('openPwd', val)"
         @update:showSeatingChartLocal="(val) => $emit('update:showSeatingChartLocal', val)"
+        @update:showSmallSeatMap="(val) => $emit('update:showSmallSeatMap', val)"
         @update:showHygieneLocal="(val) => $emit('update:showHygieneLocal', val)"
       />
     </div>
@@ -91,16 +94,18 @@ const props = defineProps({
   isIpBrownlisted: Boolean,
   examData: Object,
   indexButtonSettings: { type: Object, default: () => ({}) },
+  isWikiImageVisible: Boolean,
   isScheduleButtonVisible: Boolean,
   seatingChart: Object,
   showSeatingChartLocal: Boolean,
+  showSmallSeatMap: Boolean,
   hygieneData: Object,
   showHygieneLocal: Boolean,
   isHistoryVisibleOnIndex: Boolean,
   isClassTime: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['enterExam', 'openLargeSchedule', 'openPwd', 'update:showSeatingChartLocal', 'update:showHygieneLocal'])
+defineEmits(['enterExam', 'openLargeSchedule', 'openPwd', 'update:showSeatingChartLocal', 'update:showSmallSeatMap', 'update:showHygieneLocal'])
 
 const isButtonsCollapsed = ref(false)
 

@@ -50,6 +50,6 @@ const seatStatusClass = seat => {
 .exam-seat.is-early-leave { background: var(--ex-status-early-leave-bg); border: 2px solid var(--ex-status-early-leave-border); color: var(--ex-status-early-leave-text); font-weight: 900; }
 .exam-seat.is-late { background: var(--ex-status-late-bg); border-color: var(--ex-status-late-border); color: var(--ex-status-late-text); }
 .exam-seat.is-absent { background: var(--ex-status-absent-bg); border: 2px solid var(--ex-status-absent-border); color: var(--ex-status-absent-text); font-weight: 900; }
-.exam-teacher-desk { width: 34%; margin: 10px auto 0; padding: 5px; border: 2px solid var(--ex-border); border-radius: 6px; font-size: var(--ex-seat-number-size, 20px); font-weight: bold; }
+.exam-teacher-desk { width: 34%; margin: 10px auto 0; padding: 5px; border: 2px solid var(--ex-border); border-radius: 6px; font-size: var(--ex-seat-number-size, 20px); font-weight: bold; display: flex; align-items: center; justify-content: center; text-align: center; box-sizing: border-box; }
 .exam-seats-layout.is-flipped .exam-seat, .exam-seats-layout.is-flipped .exam-teacher-desk { transform: rotate(180deg); }
 </style>

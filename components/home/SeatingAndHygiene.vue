@@ -1,7 +1,7 @@
 <template>
   <div class="extra-modules">
     <!-- 座位表顯示區 -->
-    <div v-if="seatingChart.isVisible && showSeatingChartLocal && indexButtonSettings.seats" class="seating-display-board">
+    <div v-if="seatingChart.isVisible && showSeatingChartLocal && indexButtonSettings.showSeats" class="seating-display-board">
       <h3 class="seating-title">🪑 班級座位表</h3>
       <div class="seating-wrapper">
         <div :class="['seating-area', { 'is-rotated': seatingChart.isRotated }]">
@@ -24,7 +24,7 @@
     </div>
 
     <!-- 班級衛生工作顯示區 -->
-    <div v-if="hygieneData.isVisibleOnIndex && showHygieneLocal && indexButtonSettings.hygiene" class="hygiene-display-board">
+    <div v-if="hygieneData.isVisibleOnIndex && showHygieneLocal && indexButtonSettings.showHygiene" class="hygiene-display-board">
       <h3 class="hygiene-main-title">🧹 班級衛生工作管理</h3>
       <div class="tabs-container-readonly">
         <button class="tab-btn" :class="{ active: activeHygieneTab === 'morning' }" @click="activeHygieneTab = 'morning'">🌅 早上掃地</button>

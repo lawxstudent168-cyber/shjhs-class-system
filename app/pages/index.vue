@@ -67,9 +67,11 @@
               :isIpBrownlisted="isIpBrownlisted"
               :examData="examData"
               :indexButtonSettings="indexButtonSettings"
+              :isWikiImageVisible="isWikiImageVisible"
               :isScheduleButtonVisible="isScheduleButtonVisible"
               :seatingChart="seatingChart"
               :showSeatingChartLocal="showSeatingChartLocal"
+              :showSmallSeatMap="showSmallSeatMap"
               :hygieneData="hygieneData"
               :showHygieneLocal="showHygieneLocal"
               :isHistoryVisibleOnIndex="isHistoryVisibleOnIndex"
@@ -77,6 +79,7 @@
               @openLargeSchedule="showLargeSchedule = true"
               @openPwd="openPwdModal"
               @update:showSeatingChartLocal="showSeatingChartLocal = $event"
+              @update:showSmallSeatMap="showSmallSeatMap = $event"
               @update:showHygieneLocal="showHygieneLocal = $event"
             />
 
@@ -150,6 +153,7 @@
               :todayVideoUrl="todayVideoUrl"
               :youtubeIsMuted="youtubeIsMuted"
               :isVideoBlackout="isVideoBlackout"
+              :showSmallSeatMap="showSmallSeatMap && indexButtonSettings.smallSeatMap"
               :isIpBrownlisted="isIpBrownlisted"
               :seatingChart="seatingChart"
               :allStudents="allStudents"
@@ -232,6 +236,7 @@ import HomeStudentAssignments from '~~/components/home/HomeStudentAssignments.vu
 import { normalizeClassNotes } from '~/utils/classNotes.js'
 import { isValidExamDate, taiwanDateISO, taiwanClockHHMMSS } from '~/utils/examSchedule.js'
 import { isVideoBlackoutTime } from '~/utils/videoBlackout.js'
+import { effectiveHomeButtonSettings } from '~/utils/homeButtonSettings.js'
 
 // 💡 匯入剛剛拆分出來的強大 Composables
 import { useFormatters } from '~/composables/useFormatters'
@@ -255,6 +260,7 @@ const updateTime = () => { nowTick.value = Date.now(); currentTime.value = taiwa
 // 狀態控制
 const showEmergencyModal = ref(false)
 const showSeatingChartLocal = ref(false)
+const showSmallSeatMap = ref(false)
 const showHygieneLocal = ref(false)
 const showLargeSchedule = ref(false)
 const isExamModeView = ref(false)
@@ -302,16 +308,14 @@ const classNotesRangeDisplay = computed(() => `${classNotesTodayISO.value} 起 7
 // 以下是畫面專屬的 computed 與行為邏輯
 // ==============
 const activeGoodArticle = computed(() => goodArticles.value.find(a => a.is_published === true) || null)
+const isWikiImageVisible = computed(() => indexModulesConfig.value.some(module => module.id === 'wikiImage' && module.isVisible))
 const todayEnglishSongUrl = computed(() => englishSongSchedule.value[new Date(nowTick.value).getDay()] || '')
 const isEnglishSongVisible = computed(() => englishSongSchedule.value.isVisible !== false)
 const todayVideoUrl = computed(() => youtubeSchedule.value[new Date(nowTick.value).getDay()] || '')
 const isVideoBlackout = computed(() => isVideoBlackoutTime(youtubeBlockedDates.value, new Date(nowTick.value)))
 
 const indexButtonSettings = computed(() => {
-  const roleSettings = roleButtonSettings.value[activeRoleCategory.value] || roleButtonSettings.value.anonymous
-  const effectiveSettings = {}
-  for (const key in roleSettings) { effectiveSettings[key] = (globalButtonSettings.value && globalButtonSettings.value[key] === false) ? false : roleSettings[key] }
-  return effectiveSettings
+  return effectiveHomeButtonSettings(roleButtonSettings.value, globalButtonSettings.value, activeRoleCategory.value)
 })
 
 const availableSchools = computed(() => {

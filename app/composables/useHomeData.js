@@ -2,21 +2,14 @@ import { ref, computed, unref } from 'vue'
 import { displayedExamSchedule, normalizeExamSchedule, taiwanDateISO } from '../utils/examSchedule.js'
 import { normalizeClassNotes, weeklyClassNotes } from '../utils/classNotes.js'
 import { resolveSeatingLayout } from '../utils/seatingSchedule.js'
+import { normalizeRoleButtonSettings } from '../utils/homeButtonSettings.js'
 
 export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCategoryRef, currentIdentityRef, allStudentsRef, allStudentsForLoginRef, todayAttendancesRef, nowTickRef) {
   const contactBookItems = ref([])
   const officerPasswords = ref({ academic: '', counseling: '', discipline: '', teacher: '168168168' })
   const isHistoryVisibleOnIndex = ref(false)
   const globalButtonSettings = ref({})
-  const defaultRoleSettings = {
-    anonymous: { parentBind: true, parentMsg: true, studentMsg: true, parentLeave: true, assignments: true, discipline: true, hygiene: true, seats: true, schedule: false, exams: false, emergency: true, admin: false },
-    classroom: { parentBind: false, parentMsg: false, studentMsg: false, parentLeave: false, assignments: true, discipline: true, hygiene: true, seats: true, schedule: false, exams: false, emergency: true, admin: false },
-    parent: { parentBind: false, parentMsg: true, studentMsg: false, parentLeave: true, assignments: true, discipline: true, hygiene: true, seats: true, schedule: false, exams: false, emergency: true, admin: false },
-    student: { parentBind: false, parentMsg: false, studentMsg: true, parentLeave: false, assignments: true, discipline: true, hygiene: true, seats: true, schedule: false, exams: false, emergency: true, admin: false },
-    subject_teacher: { parentBind: false, parentMsg: false, studentMsg: false, parentLeave: false, assignments: true, discipline: true, hygiene: true, seats: true, schedule: false, exams: false, emergency: true, admin: false },
-    teacher: { parentBind: true, parentMsg: true, studentMsg: true, parentLeave: true, assignments: true, discipline: true, hygiene: true, seats: true, schedule: true, exams: true, emergency: true, admin: true }
-  }
-  const roleButtonSettings = ref(JSON.parse(JSON.stringify(defaultRoleSettings)))
+  const roleButtonSettings = ref(normalizeRoleButtonSettings())
   
   const clockConfig = ref({ theme: 'classic', color: '#1e293b', size: 35, showIcon: true })
   const announcements = ref([])
@@ -116,7 +109,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
             case 'board_officer_passwords': officerPasswords.value = { ...officerPasswords.value, ...v }; break
             case 'contact_history_visible': isHistoryVisibleOnIndex.value = v; break
             case 'index_button_settings': globalButtonSettings.value = v; break
-            case 'role_button_settings': roleButtonSettings.value = { ...defaultRoleSettings, ...v }; break
+            case 'role_button_settings': roleButtonSettings.value = normalizeRoleButtonSettings(v); break
             case 'index_clock_config': clockConfig.value = { ...clockConfig.value, ...v }; break
             case 'index_clock_size': if (!sysData.find(x => x.setting_key === 'index_clock_config')) { clockConfig.value.size = Number(v) || 35 }; break
             case 'announcements_data': if (Array.isArray(v)) announcements.value = v.sort((a, b) => new Date(b.date) - new Date(a.date)); break
@@ -182,9 +175,6 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
         } catch (err) {}
       })
       
-      if (!sysData.find(s => s.setting_key === 'role_button_settings') && globalButtonSettings.value) {
-        roleButtonSettings.value.anonymous = { ...roleButtonSettings.value.anonymous, ...globalButtonSettings.value }
-      }
     }
 
     const { data: sData } = await supabase.from('students').select('*').order('seat_number')
