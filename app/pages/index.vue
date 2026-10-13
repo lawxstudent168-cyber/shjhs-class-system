@@ -104,6 +104,8 @@
               v-if="isEnglishSongVisible && todayEnglishSongUrl"
               :videoUrl="todayEnglishSongUrl"
               :isClassTime="isClassTime"
+              :isScheduledBlackout="isVideoBlackout"
+              :isMuted="englishSongSchedule.isMuted !== false"
             />
             
             <HomeWikiFeatured v-if="isWikiFeaturedVisible" />

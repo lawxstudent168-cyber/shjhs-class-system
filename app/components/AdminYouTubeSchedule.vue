@@ -24,8 +24,8 @@
     </div>
 
     <div class="blackout-settings">
-      <h4>🔒 指定日期白天禁播</h4>
-      <p>選定日期的台灣時間 07:30–16:45，即使課表顯示下課，首頁推薦影片仍會暫停；教室可輸入導師密碼暫時解鎖。其他日期照原本課表播放。</p>
+      <h4>🔒 指定日期白天禁播（推薦影片與英語歌曲）</h4>
+      <p>選定日期的台灣時間 07:30–16:45，即使課表顯示下課，首頁推薦影片與英語歌曲仍會暫停；教室可輸入導師密碼暫時解鎖。其他日期照原本課表播放。</p>
       <div class="blackout-controls">
         <label for="blackout-date">禁播日期</label>
         <input id="blackout-date" v-model="blackoutDateInput" type="date" class="blackout-date-input" />
@@ -71,6 +71,7 @@
     <div class="info-box-song">
       <p>💡 <strong>說明：</strong> 請貼上 YouTube 音樂網址。系統會根據「星期幾」自動在首頁左側播放對應的歌曲。</p>
       <p>這項模組同樣<strong>只有在「下課時間」才會自動播放，上課鐘響將自動暫停並變黑畫面</strong>。</p>
+      <p>上方「指定日期白天禁播」也適用於英語歌曲，儲存影片排程後生效。</p>
       <p style="color: #ec4899; margin-top: 5px;">※ 留空代表該天不顯示歌曲區塊。</p>
     </div>
 
