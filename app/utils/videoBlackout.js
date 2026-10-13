@@ -10,7 +10,7 @@ export function isVideoBlackoutTime(dates, now = new Date()) {
     timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
   }).formatToParts(now).map(part => [part.type, part.value]))
   const minutes = Number(parts.hour) * 60 + Number(parts.minute)
-  return minutes >= 7 * 60 + 30 && minutes < 17 * 60 + 45
+  return minutes >= 7 * 60 + 30 && minutes < 16 * 60 + 45
 }
 
 export function matchesTeacherVideoPassword(attempt, config, now = new Date()) {

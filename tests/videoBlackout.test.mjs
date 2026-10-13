@@ -6,12 +6,12 @@ test('selected dates are unique, sorted, and valid', () => {
   assert.deepEqual(normalizeVideoBlackoutDates(['2026-10-14', '2026-10-13', '2026-10-13', '2026-02-30', 'bad']), ['2026-10-13', '2026-10-14'])
 })
 
-test('selected date blocks video from 07:30 until 17:45 Taiwan time', () => {
+test('selected date blocks video from 07:30 until 16:45 Taiwan time', () => {
   const dates = ['2026-10-13']
   assert.equal(isVideoBlackoutTime(dates, new Date('2026-10-12T23:29:00Z')), false)
   assert.equal(isVideoBlackoutTime(dates, new Date('2026-10-12T23:30:00Z')), true)
-  assert.equal(isVideoBlackoutTime(dates, new Date('2026-10-13T09:44:00Z')), true)
-  assert.equal(isVideoBlackoutTime(dates, new Date('2026-10-13T09:45:00Z')), false)
+  assert.equal(isVideoBlackoutTime(dates, new Date('2026-10-13T08:44:00Z')), true)
+  assert.equal(isVideoBlackoutTime(dates, new Date('2026-10-13T08:45:00Z')), false)
   assert.equal(isVideoBlackoutTime(['2026-10-14'], new Date('2026-10-12T23:30:00Z')), false)
 })
 

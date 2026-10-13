@@ -25,7 +25,7 @@
 
     <div class="blackout-settings">
       <h4>🔒 指定日期白天禁播</h4>
-      <p>選定日期的台灣時間 07:30–17:45，即使課表顯示下課，首頁推薦影片仍會暫停；教室可輸入導師密碼暫時解鎖。其他日期照原本課表播放。</p>
+      <p>選定日期的台灣時間 07:30–16:45，即使課表顯示下課，首頁推薦影片仍會暫停；教室可輸入導師密碼暫時解鎖。其他日期照原本課表播放。</p>
       <div class="blackout-controls">
         <label for="blackout-date">禁播日期</label>
         <input id="blackout-date" v-model="blackoutDateInput" type="date" class="blackout-date-input" />

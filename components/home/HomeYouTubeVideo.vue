@@ -20,7 +20,7 @@
               <div class="overlay-text">
                 <div class="icon">🤫</div>
                 <h4>{{ isScheduledBlackout ? '今日白天禁播中' : '上課中，專心聽講' }}</h4>
-                <p>{{ isScheduledBlackout ? '07:30–17:45 暫停播放；點擊後輸入導師密碼並按 Enter 解鎖' : '影片已隱藏並暫停，下課鐘響將自動恢復播放' }}</p>
+                <p>{{ isScheduledBlackout ? '07:30–16:45 暫停播放；點擊後輸入導師密碼並按 Enter 解鎖' : '影片已隱藏並暫停，下課鐘響將自動恢復播放' }}</p>
                 
                 <!-- 💡 隱形盲打輸入框 (完全不顯示) -->
                 <input 
