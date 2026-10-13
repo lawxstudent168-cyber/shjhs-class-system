@@ -7,7 +7,7 @@
     <div v-if="seatingChart.seats?.length" class="exam-seats-layout" :class="{ 'is-flipped': Boolean(seatingChart.isRotated) !== flipSeats }">
       <div class="exam-seat-grid">
         <div v-for="(seat, index) in seatingChart.seats" :key="seat.id ?? index"
-          class="exam-seat" :class="{ 'is-hidden': seat.isHidden, 'is-leave': isSeatOnLeave(seat) }">
+          class="exam-seat" :class="[seatStatusClass(seat), { 'is-hidden': seat.isHidden }]">
           <span v-if="!seat.isHidden">{{ seat.seatNum }}</span>
         </div>
       </div>
@@ -18,18 +18,18 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 
 const props = defineProps({
   seatingChart: { type: Object, default: () => ({ seats: [], isRotated: false }) },
-  leaveSeats: { type: Array, default: () => [] },
+  statusBySeat: { type: Object, default: () => ({}) },
   compact: { type: Boolean, default: false }
 })
 const flipSeats = ref(false)
-const leaveSeatNumbers = computed(() => new Set(props.leaveSeats.map(value => Number(value))))
-const isSeatOnLeave = seat => {
+const seatStatusClass = seat => {
   const number = String(seat.seatNum ?? '').match(/\d+/)?.[0]
-  return number !== undefined && leaveSeatNumbers.value.has(Number(number))
+  const status = number === undefined ? null : props.statusBySeat[String(Number(number))]
+  return status ? `is-${status}` : ''
 }
 </script>
 
@@ -44,7 +44,12 @@ const isSeatOnLeave = seat => {
 .exam-seat { min-height: 42px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--ex-border); border-radius: 5px; font-size: var(--ex-seat-number-size, 20px); font-weight: bold; background: var(--ex-bg); overflow-wrap: anywhere; }
 .compact .exam-seat { min-height: 32px; }
 .exam-seat.is-hidden { visibility: hidden; }
-.exam-seat.is-leave { background: #fee2e2; border: 2px solid #dc2626; color: #b91c1c; font-weight: 900; }
+.exam-seat.is-present { background: var(--ex-status-present-bg); border-color: var(--ex-status-present-border); color: var(--ex-status-present-text); }
+.exam-seat.is-leave { background: var(--ex-status-leave-bg); border: 2px solid var(--ex-status-leave-border); color: var(--ex-status-leave-text); font-weight: 900; }
+.exam-seat.is-late-leave { background: var(--ex-status-late-leave-bg); border: 2px solid var(--ex-status-late-leave-border); color: var(--ex-status-late-leave-text); font-weight: 900; }
+.exam-seat.is-early-leave { background: var(--ex-status-early-leave-bg); border: 2px solid var(--ex-status-early-leave-border); color: var(--ex-status-early-leave-text); font-weight: 900; }
+.exam-seat.is-late { background: var(--ex-status-late-bg); border-color: var(--ex-status-late-border); color: var(--ex-status-late-text); }
+.exam-seat.is-absent { background: var(--ex-status-absent-bg); border: 2px solid var(--ex-status-absent-border); color: var(--ex-status-absent-text); font-weight: 900; }
 .exam-teacher-desk { width: 34%; margin: 10px auto 0; padding: 5px; border: 2px solid var(--ex-border); border-radius: 6px; font-size: var(--ex-seat-number-size, 20px); font-weight: bold; }
 .exam-seats-layout.is-flipped .exam-seat, .exam-seats-layout.is-flipped .exam-teacher-desk { transform: rotate(180deg); }
 </style>

@@ -5,12 +5,12 @@
     <div class="exam-header">
       <h1 class="exam-main-title">{{ examData.title }}</h1>
       <section class="exam-attendance" aria-label="今日出缺席統計">
-        <span>應到 <strong>{{ attendanceSummary.expected }}</strong></span>
-        <span>已到 <strong>{{ attendanceSummary.present }}</strong></span>
+        <span class="attendance-expected">應到 <strong>{{ attendanceSummary.expected }}</strong></span>
+        <span class="attendance-present">已到 <strong>{{ attendanceSummary.present }}</strong></span>
         <span class="attendance-leave">全天請假 <strong>{{ attendanceSummary.leave }}</strong></span>
-        <span class="attendance-leave">晚到請假 <strong>{{ attendanceSummary.lateLeave }}</strong></span>
-        <span class="attendance-leave">早退請假 <strong>{{ attendanceSummary.earlyLeave }}</strong></span>
-        <span>遲到 <strong>{{ attendanceSummary.late }}</strong></span>
+        <span class="attendance-late-leave">晚到請假 <strong>{{ attendanceSummary.lateLeave }}</strong></span>
+        <span class="attendance-early-leave">早退請假 <strong>{{ attendanceSummary.earlyLeave }}</strong></span>
+        <span class="attendance-late">遲到 <strong>{{ attendanceSummary.late }}</strong></span>
         <span class="attendance-absent">未到 <strong>{{ attendanceSummary.absent }}</strong>（{{ attendanceSummary.absentSeats.join('、') || '無' }}）</span>
         <span class="attendance-leave">請假座號 {{ attendanceSummary.leaveSeats.join('、') || '無' }}</span>
       </section>
@@ -52,7 +52,7 @@
           <button role="tab" :aria-selected="detailTab === 'seats'" :class="{ active: detailTab === 'seats' }" @click="detailTab = 'seats'">🪑 目前座位表</button>
         </div>
         <ExamSeatMap v-show="isFocusedExam || detailTab === 'seats'" :seating-chart="seatingChart"
-          :leave-seats="attendanceSummary.leaveSeats" :compact="isFocusedExam" role="tabpanel" />
+          :status-by-seat="seatStatusByNumber" :compact="isFocusedExam" role="tabpanel" />
         <ExamNotes v-show="isFocusedExam || detailTab === 'notes'" :notes="examData.notes || []" role="tabpanel" />
 
       </div>
@@ -65,7 +65,7 @@ import { computed, ref } from 'vue'
 import ExamLiveRow from './ExamLiveRow.vue'
 import ExamSeatMap from './ExamSeatMap.vue'
 import ExamNotes from './ExamNotes.vue'
-import { summarizeExamAttendance } from '../../app/utils/examAttendance.js'
+import { examSeatStatusByNumber, summarizeExamAttendance } from '../../app/utils/examAttendance.js'
 const props = defineProps({
   examData: { type: Object, required: true },
   examStatus: { type: Object, required: true },
@@ -80,24 +80,28 @@ const props = defineProps({
 })
 
 const attendanceSummary = computed(() => summarizeExamAttendance(props.allStudents, props.todayAttendances))
+const seatStatusByNumber = computed(() => examSeatStatusByNumber(props.allStudents, props.todayAttendances))
 const detailTab = ref('notes')
 const isFocusedExam = computed(() => props.examStatus.state === 'TESTING' && props.examStatus.current?.isExam === true)
 defineEmits(['exit'])
 </script>
 
 <style scoped>
-.exam-dashboard { background-color: var(--ex-bg); color: var(--ex-text); min-height: 100vh; padding: 28px 30px 20px; display: flex; flex-direction: column; position: relative; align-items: stretch; transition: background-color 0.5s ease;}
+.exam-dashboard { --ex-status-present-bg: #dcfce7; --ex-status-present-text: #166534; --ex-status-present-border: #86efac; --ex-status-leave-bg: #fee2e2; --ex-status-leave-text: #b91c1c; --ex-status-leave-border: #dc2626; --ex-status-late-leave-bg: #ffe4e6; --ex-status-late-leave-text: #9f1239; --ex-status-late-leave-border: #e11d48; --ex-status-early-leave-bg: #fff1f2; --ex-status-early-leave-text: #9f1239; --ex-status-early-leave-border: #fb7185; --ex-status-late-bg: #dbeafe; --ex-status-late-text: #1d4ed8; --ex-status-late-border: #93c5fd; --ex-status-absent-bg: #fecaca; --ex-status-absent-text: #7f1d1d; --ex-status-absent-border: #b91c1c; background-color: var(--ex-bg); color: var(--ex-text); min-height: 100vh; padding: 28px 30px 20px; display: flex; flex-direction: column; position: relative; align-items: stretch; transition: background-color 0.5s ease;}
 .exit-exam-btn { position: fixed; top: 4px; right: 12px; background: var(--ex-panel-bg); border: 1px solid var(--ex-border); color: var(--ex-text); padding: 3px 8px; border-radius: 7px; cursor: pointer; font-size: 0.75rem; line-height: 1; opacity: 0.65; transition: opacity 0.2s; z-index: 50; }
 .exit-exam-btn:hover, .exit-exam-btn:focus-visible { opacity: 1; }
 .exam-header { display: flex; align-items: center; gap: 18px; min-width: 0; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid var(--ex-border); }
 .exam-main-title { flex: 1 1 40%; min-width: 0; font-size: min(var(--ex-title-size, 56px), 2.9vw); margin: 0; color: var(--ex-title); letter-spacing: 1px; text-align: center; white-space: nowrap; }
 .exam-attendance { flex: 0 1 60%; min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 6px; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; font-size: var(--ex-attendance-size, 14px); line-height: 1.3; }
-.exam-attendance span { flex: none; padding: 4px 5px; border-radius: 5px; background: var(--ex-panel-bg); }
-.exam-attendance strong { color: var(--ex-title); }
-.exam-attendance .attendance-leave { background: #fef3c7; color: #78350f; font-weight: bold; }
-.exam-attendance .attendance-leave strong { color: inherit; }
-.exam-attendance .attendance-absent { background: #fee2e2; color: #991b1b; font-weight: bold; }
-.exam-attendance .attendance-absent strong { color: inherit; }
+.exam-attendance span { flex: none; padding: 4px 5px; border-radius: 5px; border: 1px solid transparent; }
+.exam-attendance strong { color: inherit; }
+.exam-attendance .attendance-expected { background: #e2e8f0; color: #334155; border-color: #94a3b8; }
+.exam-attendance .attendance-present { background: var(--ex-status-present-bg); color: var(--ex-status-present-text); border-color: var(--ex-status-present-border); }
+.exam-attendance .attendance-leave { background: var(--ex-status-leave-bg); color: var(--ex-status-leave-text); border-color: var(--ex-status-leave-border); font-weight: bold; }
+.exam-attendance .attendance-late-leave { background: var(--ex-status-late-leave-bg); color: var(--ex-status-late-leave-text); border-color: var(--ex-status-late-leave-border); font-weight: bold; }
+.exam-attendance .attendance-early-leave { background: var(--ex-status-early-leave-bg); color: var(--ex-status-early-leave-text); border-color: var(--ex-status-early-leave-border); font-weight: bold; }
+.exam-attendance .attendance-late { background: var(--ex-status-late-bg); color: var(--ex-status-late-text); border-color: var(--ex-status-late-border); }
+.exam-attendance .attendance-absent { background: var(--ex-status-absent-bg); color: var(--ex-status-absent-text); border-color: var(--ex-status-absent-border); font-weight: bold; }
 .exam-split-layout { display: flex; gap: 60px; flex: 1; align-items: flex-start; justify-content: center; }
 .exam-left-panel { flex: 1; max-width: 900px; }
 .exam-focus-panel { min-height: 560px; background: var(--ex-panel-bg); border: 1px solid var(--ex-border); border-radius: 16px; padding: 30px; display: flex; flex-direction: column; justify-content: space-around; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }

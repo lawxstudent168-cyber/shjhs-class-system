@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { summarizeExamAttendance } from '../app/utils/examAttendance.js'
+import { examSeatStatusByNumber, summarizeExamAttendance } from '../app/utils/examAttendance.js'
 
 test('exam header uses homepage attendance categories and shows seats only for absent and leave', () => {
   const students = [3, 1, 10, 2, 6, 5, 4, 7].map(number => ({ id: number, seat_number: number }))
@@ -27,4 +27,18 @@ test('exam header uses homepage attendance categories and shows seats only for a
 
 test('records outside the homepage student list do not change exam counts', () => {
   assert.equal(summarizeExamAttendance([{ id: 1, seat_number: 1 }], [{ student_id: 2, status: '已到' }]).absent, 1)
+})
+
+test('seat colors use the same attendance categories shown in the exam header', () => {
+  const students = [1, 2, 3, 4, 5, 6].map(number => ({ id: number, seat_number: String(number).padStart(2, '0') }))
+  const attendances = [
+    { student_id: 1, status: '已到' },
+    { student_id: 2, status: '全天請假' },
+    { student_id: 3, status: '晚到請假(10:00)' },
+    { student_id: 4, status: '早退請假(14:00)' },
+    { student_id: 5, status: '遲到_08:15' }
+  ]
+  assert.deepEqual(examSeatStatusByNumber(students, attendances), {
+    1: 'present', 2: 'leave', 3: 'late-leave', 4: 'early-leave', 5: 'late', 6: 'absent'
+  })
 })
