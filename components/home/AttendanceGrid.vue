@@ -62,8 +62,12 @@
 
     <!-- 座位模式沿用首頁目前生效的座位表，空位仍保留其位置。 -->
     <div v-else role="tabpanel" class="seating-view">
+      <div class="seating-toolbar">
+        <span>目前座位表</span>
+        <button type="button" @click="flipSeats = !flipSeats">轉180度</button>
+      </div>
       <div v-if="seatingLayout.slots.length" class="seating-scroll">
-        <div class="seating-layout" :class="{ 'is-rotated': seatingChart.isRotated }">
+        <div class="seating-layout" :class="{ 'is-rotated': Boolean(seatingChart.isRotated) !== flipSeats }">
           <div class="seating-grid">
             <div v-for="slot in seatingLayout.slots" :key="slot.key" class="seat-slot" :class="{ 'is-hidden-slot': slot.isHidden }">
               <button v-if="slot.student" type="button" class="student-card" :class="getStatusClass(slot.student.id)" @click="$emit('toggle-attendance', slot.student)">
@@ -115,6 +119,7 @@ const props = defineProps({
 defineEmits(['toggle-attendance', 'update:layoutMode'])
 
 const seatingLayout = computed(() => attendanceSeatingLayout(props.allStudents, props.seatingChart))
+const flipSeats = ref(false)
 
 const isCollapsed = ref(false)
 
@@ -221,6 +226,8 @@ const getStatusClass = (studentId) => {
 /* --- 👨‍🎓 學生網格樣式 --- */
 .grid-container { display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; }
 .seating-scroll { width: 100%; overflow-x: auto; padding-bottom: 4px; }
+.seating-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; color: #334155; font-weight: 700; }
+.seating-toolbar button { padding: 5px 9px; border: 1px solid #94a3b8; border-radius: 6px; background: #f8fafc; color: #334155; font: inherit; font-size: 0.85rem; cursor: pointer; }
 .seating-layout { min-width: 540px; transition: transform 0.2s ease; }
 .seating-layout.is-rotated { transform: rotate(180deg); }
 .seating-layout.is-rotated .student-card, .seating-layout.is-rotated .teacher-desk { transform: rotate(180deg); }

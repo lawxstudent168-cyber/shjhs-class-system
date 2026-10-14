@@ -37,7 +37,7 @@
         <div v-show="activeHygieneTab === 'morning'" class="hygiene-content">
           <h3 class="hygiene-content-title" v-html="formatNL(hygieneData.morning.title)"></h3>
           <table class="custom-table morning-table">
-            <thead><tr><th colspan="2" width="20%">教室</th><th width="30%">成員名單</th><th width="50%">工作內容</th></tr></thead>
+            <thead><tr><th colspan="2" width="20%">教室</th><th width="30%">座號</th><th width="50%">工作內容</th></tr></thead>
             <tbody>
               <tr><td colspan="2" v-html="formatNL(hygieneData.morning.in_hygiene)"></td><td v-html="formatNL(hygieneData.morning.in_hygiene_names)"></td><td v-html="formatNL(hygieneData.morning.in_hygiene_work)"></td></tr>
               <tr><td colspan="2" v-html="formatNL(hygieneData.morning.board)"></td><td v-html="formatNL(hygieneData.morning.board_names)"></td><td v-html="formatNL(hygieneData.morning.board_work)"></td></tr>
@@ -47,7 +47,7 @@
               <tr><td colspan="2" v-html="formatNL(hygieneData.morning.hallway)"></td><td v-html="formatNL(hygieneData.morning.hallway_names)"></td><td v-html="formatNL(hygieneData.morning.hallway_work)"></td></tr>
               <tr><td colspan="2" v-html="formatNL(hygieneData.morning.trash)"></td><td v-html="formatNL(hygieneData.morning.trash_names)"></td><td v-html="formatNL(hygieneData.morning.trash_work)"></td></tr>
               
-              <tr class="header-row"><th>外掃區</th><th>打掃區域</th><th>成員名單</th><th>工作內容</th></tr>
+              <tr class="header-row"><th>外掃區</th><th>打掃區域</th><th>座號</th><th>工作內容</th></tr>
               
               <!-- 💡 判斷：如果是舊版資料 (尚未設定動態陣列)，維持舊的死板 4 列 -->
               <template v-if="!hygieneData.morning.out_dynamic_areas || hygieneData.morning.out_dynamic_areas.length === 0">
@@ -119,7 +119,7 @@
           <h3 class="hygiene-content-title" v-html="formatNL(hygieneData.squad.title)"></h3>
           <table class="custom-table squad-table">
             <thead>
-              <tr><th width="15%">小隊職務</th><th width="20%">細項</th><th width="20%">姓名 或 座號</th><th width="45%">工作內容</th></tr>
+              <tr><th width="15%">小隊職務</th><th width="20%">細項</th><th width="20%">座號</th><th width="45%">工作內容</th></tr>
             </thead>
             <tbody>
               <tr v-for="n in 6" :key="'ld-'+n">

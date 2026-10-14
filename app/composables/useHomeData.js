@@ -3,6 +3,7 @@ import { displayedExamSchedule, normalizeExamSchedule, taiwanDateISO } from '../
 import { normalizeClassNotes, weeklyClassNotes } from '../utils/classNotes.js'
 import { resolveSeatingLayout } from '../utils/seatingSchedule.js'
 import { normalizeRoleButtonSettings } from '../utils/homeButtonSettings.js'
+import { sanitizeHygieneAssignments } from '../utils/hygieneAssignments.js'
 
 export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCategoryRef, currentIdentityRef, allStudentsRef, allStudentsForLoginRef, todayAttendancesRef, nowTickRef) {
   const contactBookItems = ref([])
@@ -154,7 +155,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
             case 'parent_notices_data': if (Array.isArray(v)) { parentNotices.value = v.filter(n => !n.isHidden && (!n.startDate || n.startDate <= todayISO) && (!n.endDate || n.endDate >= todayISO)) }; break
             case 'class_notes_data': allClassNoteItems.value = normalizeClassNotes(v); break
             case 'seating_chart_data': if (typeof v === 'object') savedSeatingData.value = v; break
-            case 'hygiene_management_data': if (typeof v === 'object') hygieneData.value = { ...hygieneData.value, ...v }; break
+            case 'hygiene_management_data': if (typeof v === 'object') hygieneData.value = sanitizeHygieneAssignments({ ...hygieneData.value, ...v }); break
             case 'marquee_settings': marqueeSettings.value = v; break
             case 'force_logout_timestamp': {
               const dbLogoutTime = Number(v) || 0; const localLogoutTime = Number(localStorage.getItem('local_logout_timestamp')) || 0
