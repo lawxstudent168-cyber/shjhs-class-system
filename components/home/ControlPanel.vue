@@ -60,6 +60,7 @@
         :seatingChart="seatingChart"
         :showSeatingChartLocal="showSeatingChartLocal"
         :showSmallSeatMap="showSmallSeatMap"
+        :attendanceLayoutMode="attendanceLayoutMode"
         :hygieneData="hygieneData"
         :showHygieneLocal="showHygieneLocal"
         :isHistoryVisibleOnIndex="isHistoryVisibleOnIndex"
@@ -102,6 +103,7 @@ const props = defineProps({
   seatingChart: Object,
   showSeatingChartLocal: Boolean,
   showSmallSeatMap: Boolean,
+  attendanceLayoutMode: { type: String, default: 'number' },
   allStudents: { type: Array, default: () => [] },
   todayAttendances: { type: Array, default: () => [] },
   hygieneData: Object,
@@ -113,7 +115,7 @@ const props = defineProps({
 defineEmits(['enterExam', 'openLargeSchedule', 'openPwd', 'update:showSeatingChartLocal', 'update:showSmallSeatMap', 'update:showHygieneLocal'])
 
 const isButtonsCollapsed = ref(false)
-const isSmallSeatMapVisible = computed(() => props.isIpBrownlisted && props.indexButtonSettings.smallSeatMap && props.showSmallSeatMap)
+const isSmallSeatMapVisible = computed(() => props.isIpBrownlisted && props.indexButtonSettings.smallSeatMap && props.showSmallSeatMap && props.attendanceLayoutMode !== 'seating')
 const seatStatusByNumber = computed(() => examSeatStatusByNumber(props.allStudents, props.todayAttendances))
 
 // 💡 特務級後台解鎖邏輯

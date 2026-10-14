@@ -40,8 +40,13 @@
       </div>
     </div>
 
-    <!-- 👨‍🎓 學生卡片網格 -->
-    <div class="grid-container">
+    <div class="attendance-tabs" role="tablist" aria-label="點名板排列方式">
+      <button type="button" role="tab" :aria-selected="layoutMode === 'number'" :class="{ active: layoutMode === 'number' }" @click="$emit('update:layoutMode', 'number')">按照座號排列</button>
+      <button type="button" role="tab" :aria-selected="layoutMode === 'seating'" :class="{ active: layoutMode === 'seating' }" @click="$emit('update:layoutMode', 'seating')">按目前座位排列</button>
+    </div>
+
+    <!-- 👨‍🎓 原本的座號排列 -->
+    <div v-if="layoutMode === 'number'" class="grid-container" role="tabpanel">
       <button 
         v-for="student in allStudents" 
         :key="student.id"
@@ -55,15 +60,47 @@
       </button>
     </div>
 
+    <!-- 座位模式沿用首頁目前生效的座位表，空位仍保留其位置。 -->
+    <div v-else role="tabpanel" class="seating-view">
+      <div v-if="seatingLayout.slots.length" class="seating-scroll">
+        <div class="seating-layout" :class="{ 'is-rotated': seatingChart.isRotated }">
+          <div class="seating-grid">
+            <div v-for="slot in seatingLayout.slots" :key="slot.key" class="seat-slot" :class="{ 'is-hidden-slot': slot.isHidden }">
+              <button v-if="slot.student" type="button" class="student-card" :class="getStatusClass(slot.student.id)" @click="$emit('toggle-attendance', slot.student)">
+                <div class="st-num">{{ slot.student.seat_number }}</div>
+                <div class="st-name">{{ privacyFilter(slot.student.real_name || slot.student.hidden_name) }}</div>
+                <div class="st-status">{{ getStatusText(slot.student.id) }}</div>
+              </button>
+            </div>
+          </div>
+          <div class="teacher-desk">講桌</div>
+        </div>
+      </div>
+      <p v-else class="seating-hint">目前尚未儲存座位表；所有學生列在下方，仍可點名。</p>
+      <div v-if="seatingLayout.unplaced.length" class="unplaced-section">
+        <div class="unplaced-title">未排入目前座位表</div>
+        <div class="grid-container">
+          <button v-for="student in seatingLayout.unplaced" :key="student.id" type="button" class="student-card" :class="getStatusClass(student.id)" @click="$emit('toggle-attendance', student)">
+            <div class="st-num">{{ student.seat_number }}</div>
+            <div class="st-name">{{ privacyFilter(student.real_name || student.hidden_name) }}</div>
+            <div class="st-status">{{ getStatusText(student.id) }}</div>
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { attendanceSeatingLayout } from '../../app/utils/attendanceSeating.js'
 
 const props = defineProps({
   allStudents: { type: Array, default: () => [] },
   todayAttendances: { type: Array, default: () => [] },
+  seatingChart: { type: Object, default: () => ({ seats: [], isRotated: false }) },
+  layoutMode: { type: String, default: 'number' },
   expectedCount: { type: Number, default: 0 },
   presentCount: { type: Number, default: 0 },
   leaveCount: { type: Number, default: 0 },
@@ -75,7 +112,9 @@ const props = defineProps({
   isClassTime: { type: Boolean, default: false }
 })
 
-defineEmits(['toggle-attendance'])
+defineEmits(['toggle-attendance', 'update:layoutMode'])
+
+const seatingLayout = computed(() => attendanceSeatingLayout(props.allStudents, props.seatingChart))
 
 const isCollapsed = ref(false)
 
@@ -164,6 +203,10 @@ const getStatusClass = (studentId) => {
 
 /* --- 📊 統計列樣式 --- */
 .stats-row { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
+.attendance-tabs { display: flex; gap: 6px; margin-bottom: 14px; border-bottom: 2px solid #cbd5e1; }
+.attendance-tabs button { flex: 1; padding: 9px 5px; border: 0; border-radius: 8px 8px 0 0; background: #f1f5f9; color: #475569; font: inherit; font-weight: 700; cursor: pointer; }
+.attendance-tabs button.active { background: #dbeafe; color: #1d4ed8; box-shadow: inset 0 -3px #2563eb; }
+.attendance-tabs button:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
 .stat-box { flex: 1; text-align: center; padding: 10px; border-radius: 8px; font-size: 1rem; border: 1px solid transparent; min-width: 90px; }
 .stat-box strong { font-size: 1.15rem; margin-left: 2px; }
 
@@ -177,6 +220,22 @@ const getStatusClass = (studentId) => {
 
 /* --- 👨‍🎓 學生網格樣式 --- */
 .grid-container { display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; }
+.seating-scroll { width: 100%; overflow-x: auto; padding-bottom: 4px; }
+.seating-layout { min-width: 540px; transition: transform 0.2s ease; }
+.seating-layout.is-rotated { transform: rotate(180deg); }
+.seating-layout.is-rotated .student-card, .seating-layout.is-rotated .teacher-desk { transform: rotate(180deg); }
+.seating-layout.is-rotated .student-card:hover { transform: rotate(180deg) translateY(2px); }
+.seating-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.seat-slot { min-height: 84px; border: 1px dashed #cbd5e1; border-radius: 8px; }
+.seat-slot.is-hidden-slot { visibility: hidden; }
+.seat-slot .student-card { width: 100%; min-height: 84px; height: 100%; padding: 5px 2px; box-sizing: border-box; }
+.seat-slot .st-num { font-size: 0.95rem; margin-bottom: 2px; }
+.seat-slot .st-name { font-size: 0.95rem; margin-bottom: 3px; letter-spacing: 0; overflow-wrap: anywhere; }
+.seat-slot .st-status { font-size: 0.77rem; }
+.teacher-desk { width: 34%; margin: 10px auto 0; padding: 4px; text-align: center; border: 2px solid #94a3b8; border-radius: 6px; font-weight: 700; box-sizing: border-box; }
+.seating-hint { margin: 0 0 12px; color: #475569; }
+.unplaced-section { margin-top: 18px; }
+.unplaced-title { margin-bottom: 9px; font-weight: 700; color: #475569; }
 
 .student-card { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 5px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; transition: all 0.2s ease; font-family: inherit; }
 .student-card:hover { filter: brightness(0.95); transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }

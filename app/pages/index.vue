@@ -71,6 +71,7 @@
               :seatingChart="seatingChart"
               :showSeatingChartLocal="showSeatingChartLocal"
               :showSmallSeatMap="showSmallSeatMap"
+              :attendanceLayoutMode="attendanceLayoutMode"
               :allStudents="allStudents"
               :todayAttendances="todayAttendances"
               :hygieneData="hygieneData"
@@ -89,6 +90,8 @@
               :isClassTime="isClassTime"
               :allStudents="allStudents"
               :todayAttendances="todayAttendances"
+              :seatingChart="seatingChart"
+              :layoutMode="attendanceLayoutMode"
               :expectedCount="expectedCount"
               :presentCount="presentCount"
               :leaveCount="leaveCount"
@@ -98,6 +101,7 @@
               :absentCount="absentCount"
               :privacyFilter="privacyFilter"
               @toggle-attendance="toggleAttendance"
+              @update:layoutMode="setAttendanceLayoutMode"
             />
 
             <div v-if="isIpBrownlisted && !isWeekday" class="weekend-prompt">
@@ -257,6 +261,11 @@ const updateTime = () => { nowTick.value = Date.now(); currentTime.value = taiwa
 const showEmergencyModal = ref(false)
 const showSeatingChartLocal = ref(false)
 const showSmallSeatMap = ref(false)
+const attendanceLayoutMode = ref('number')
+const setAttendanceLayoutMode = mode => {
+  attendanceLayoutMode.value = mode
+  if (mode === 'seating') showSmallSeatMap.value = false
+}
 const showHygieneLocal = ref(false)
 const showLargeSchedule = ref(false)
 const isExamModeView = ref(false)

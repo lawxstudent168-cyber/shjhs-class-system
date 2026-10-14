@@ -49,7 +49,7 @@
               @click="$emit('update:showSeatingChartLocal', !showSeatingChartLocal)" class="btn btn-indigo">
         {{ showSeatingChartLocal ? '🙈 隱藏教室座位表' : '👀 顯示教室座位表' }}
       </button>
-      <button v-if="isIpBrownlisted && indexButtonSettings.smallSeatMap"
+      <button v-if="isIpBrownlisted && indexButtonSettings.smallSeatMap && attendanceLayoutMode !== 'seating'"
               @click="$emit('update:showSmallSeatMap', !showSmallSeatMap)" class="btn btn-indigo"
               :aria-expanded="showSmallSeatMap" aria-controls="homepage-small-seat-map">
         {{ showSmallSeatMap ? '🙈 隱藏小座位表' : '👀 顯示小座位表' }}
@@ -76,6 +76,7 @@ const props = defineProps({
   seatingChart: Object,
   showSeatingChartLocal: Boolean,
   showSmallSeatMap: Boolean,
+  attendanceLayoutMode: { type: String, default: 'number' },
   hygieneData: Object,
   showHygieneLocal: Boolean,
   isHistoryVisibleOnIndex: Boolean
