@@ -51,6 +51,35 @@
         <button class="tab-btn" :class="{ active: activeTab === 'squad' }" @click="activeTab = 'squad'">🛡️ 小隊工作管理</button>
       </div>
 
+      <section class="history-panel screen-only" aria-label="衛生管理歷史月曆">
+        <div class="history-toolbar">
+          <strong>📅 {{ tabNames[activeTab] }}歷史紀錄</strong>
+          <div class="history-actions">
+            <button type="button" @click="exportHistoryFile('json')">匯出 JSON</button>
+            <button type="button" @click="exportHistoryFile('csv')">匯出 CSV</button>
+            <button type="button" @click="historyFileInput?.click()">匯入 JSON／CSV</button>
+            <input ref="historyFileInput" type="file" accept=".json,.csv,application/json,text/csv" hidden @change="importHistoryFile" />
+          </div>
+        </div>
+        <p>選擇日期後可編輯當天生效的內容；儲存後從該日起沿用，直到下一筆變更。三個分頁的紀錄互不影響。</p>
+        <div class="calendar-header">
+          <button type="button" @click="shiftCalendarMonth(-1)" aria-label="上個月">‹</button>
+          <strong>{{ calendarMonth.replace('-', ' 年 ') }} 月</strong>
+          <button type="button" @click="shiftCalendarMonth(1)" aria-label="下個月">›</button>
+        </div>
+        <div class="history-calendar">
+          <span v-for="weekday in ['日', '一', '二', '三', '四', '五', '六']" :key="weekday" class="calendar-weekday">{{ weekday }}</span>
+          <button v-for="day in calendarDays" :key="day.date" type="button" :class="{ 'outside-month': !day.inMonth, selected: day.date === selectedDates[activeTab], recorded: day.hasRecord }" @click="selectHistoryDate(day.date)">
+            {{ day.day }}<small v-if="day.hasRecord">●</small>
+          </button>
+        </div>
+        <div class="history-selection">
+          <label>選取日期 <input type="date" :value="selectedDates[activeTab]" @change="selectHistoryDate($event.target.value)" /></label>
+          <span>目前顯示：{{ activeEffectiveDate ? `${activeEffectiveDate} 起的紀錄` : '原始版本' }}</span>
+          <button v-if="hasSelectedRecord" type="button" class="delete-history" :disabled="isSaving" @click="deleteSelectedHistory">刪除這天的變更</button>
+        </div>
+      </section>
+
       <div class="tips screen-only" v-if="isEditing">
         💡 成員欄位只填座號，多人可用「、」或換行分隔，例如 1、2、3。工作名稱、細節及備註仍可自由修改；需要變色時可使用 HTML。
       </div>
@@ -323,6 +352,8 @@
 <script setup>
 import { computed, ref, onMounted, defineComponent, h } from 'vue'
 import { hygieneAssignmentReport, sanitizeHygieneAssignments } from '../utils/hygieneAssignments.js'
+import { deleteHygieneRecord, exportHygieneHistory, hygieneTabs, importHygieneHistory, normalizeHygieneHistory, resolveHygieneSection, setHygieneRecord, validHygieneDate } from '../utils/hygieneHistory.js'
+import { taiwanDateISO } from '../utils/examSchedule.js'
 const supabase = useSupabaseClient()
 
 // 💡 升級版 EditText：接收 largeFont 屬性，若有值則自動套用放大與粗體
@@ -369,14 +400,33 @@ const passwordInput = ref('')
 const isEditing = ref(false)
 const isSaving = ref(false)
 const activeTab = ref('morning')
+const tabNames = { morning: '早上掃地', lunch: '中午搬餐', squad: '小隊工作' }
+const todayTaiwan = taiwanDateISO()
+const selectedDates = ref({ morning: todayTaiwan, lunch: todayTaiwan, squad: todayTaiwan })
+const calendarMonth = ref(todayTaiwan.slice(0, 7))
+const historyFileInput = ref(null)
+const storedData = ref(null)
 const studentSeatNumbers = ref([])
 const studentSeatsLoaded = ref(false)
 const migrationError = ref('')
 const activeReport = computed(() => hygieneAssignmentReport(d.value, activeTab.value, studentSeatNumbers.value))
+const activeEffectiveDate = computed(() => resolveHygieneSection(storedData.value || defaultData, activeTab.value, selectedDates.value[activeTab.value]).effectiveDate)
+const hasSelectedRecord = computed(() => normalizeHygieneHistory(storedData.value?.history)[activeTab.value].some(item => item.date === selectedDates.value[activeTab.value]))
+const calendarDays = computed(() => {
+  const [year, month] = calendarMonth.value.split('-').map(Number)
+  const first = new Date(Date.UTC(year, month - 1, 1))
+  const start = first.getUTCDay()
+  const records = new Set(normalizeHygieneHistory(storedData.value?.history)[activeTab.value].map(item => item.date))
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(Date.UTC(year, month - 1, index - start + 1)).toISOString().slice(0, 10)
+    return { date, day: Number(date.slice(-2)), inMonth: date.slice(0, 7) === calendarMonth.value, hasRecord: records.has(date) }
+  })
+})
 
 const defaultData = {
   isVisibleOnIndex: false, 
   nameFontSize: 24, // 💡 新增的預設字體大小
+  history: { morning: [], lunch: [], squad: [] },
   morning: {
     title: '704 班 教室和外掃區 早上掃地工作分配表 2021/10/18 開始',
     note: '請先做好垃圾分類。每天早上和週五下午都要倒資源回收垃圾。\n每天早上和週五下午打掃時間視情況倒一般垃圾，超過八分滿時得立刻倒。週五下午和例假日前一天下午一定得倒光。',
@@ -434,6 +484,7 @@ const defaultData = {
 }
 
 const d = ref(JSON.parse(JSON.stringify(defaultData))) 
+storedData.value = JSON.parse(JSON.stringify(defaultData))
 
 onMounted(async () => {
   if (sessionStorage.getItem('hygiene_admin_logged_in') === 'true') {
@@ -511,11 +562,82 @@ const fetchLayout = async () => {
 
     const sanitized = sanitizeHygieneAssignments(d.value)
     if (JSON.stringify(sanitized) !== JSON.stringify(d.value)) {
-      d.value = sanitized
       const { error } = await supabase.from('system_settings').upsert({ setting_key: 'hygiene_management_data', setting_value: sanitized }, { onConflict: 'setting_key' })
       migrationError.value = error ? '舊姓名已從畫面隱藏，但資料庫清理失敗；請稍後按「儲存所有變更」重試。' : ''
     }
+    storedData.value = { ...sanitized, history: normalizeHygieneHistory(sanitized.history) }
   }
+  for (const tab of hygieneTabs) d.value[tab] = resolveHygieneSection(storedData.value, tab, selectedDates.value[tab]).section
+}
+
+const hasUnsavedSection = tab => JSON.stringify(d.value[tab]) !== JSON.stringify(resolveHygieneSection(storedData.value, tab, selectedDates.value[tab]).section)
+const selectHistoryDate = date => {
+  if (!validHygieneDate(date)) return
+  const tab = activeTab.value
+  if (isEditing.value && hasUnsavedSection(tab) && !confirm('目前分頁有尚未儲存的內容。要放棄變更並切換日期嗎？')) return
+  selectedDates.value = { ...selectedDates.value, [tab]: date }
+  calendarMonth.value = date.slice(0, 7)
+  d.value[tab] = resolveHygieneSection(storedData.value, tab, date).section
+}
+const shiftCalendarMonth = offset => {
+  const [year, month] = calendarMonth.value.split('-').map(Number)
+  const next = new Date(Date.UTC(year, month - 1 + offset, 1))
+  calendarMonth.value = next.toISOString().slice(0, 7)
+}
+const persistHistoryData = async next => {
+  const sanitized = sanitizeHygieneAssignments(next)
+  const { error } = await supabase.from('system_settings').upsert({ setting_key: 'hygiene_management_data', setting_value: sanitized }, { onConflict: 'setting_key' })
+  if (error) throw error
+  storedData.value = sanitized
+  d.value.isVisibleOnIndex = sanitized.isVisibleOnIndex
+  d.value.nameFontSize = sanitized.nameFontSize
+  migrationError.value = ''
+}
+const deleteSelectedHistory = async () => {
+  const tab = activeTab.value
+  const date = selectedDates.value[tab]
+  if (!hasSelectedRecord.value || !confirm(`確定刪除 ${date} 的${tabNames[tab]}變更？該日將沿用更早的版本。`)) return
+  isSaving.value = true
+  try {
+    const next = JSON.parse(JSON.stringify(storedData.value))
+    next.history = deleteHygieneRecord(next.history, tab, date)
+    await persistHistoryData(next)
+    d.value[tab] = resolveHygieneSection(storedData.value, tab, date).section
+  } catch { alert('刪除失敗，請重試。') } finally { isSaving.value = false }
+}
+const downloadHistoryFile = (content, filename, mime) => {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }))
+  const link = document.createElement('a')
+  link.href = url; link.download = filename; link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+const exportHistoryFile = type => {
+  try {
+    const tab = activeTab.value
+    downloadHistoryFile(exportHygieneHistory(storedData.value, tab, type), `hygiene_${tab}_history.${type}`, type === 'json' ? 'application/json' : 'text/csv;charset=utf-8')
+  } catch (error) { alert(`匯出失敗：${error.message}`) }
+}
+const importHistoryFile = async event => {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  const tab = activeTab.value
+  try {
+    if (file.size > 2 * 1024 * 1024) throw new Error('檔案不可超過 2 MB')
+    const type = file.name.toLowerCase().endsWith('.json') ? 'json' : file.name.toLowerCase().endsWith('.csv') ? 'csv' : ''
+    const imported = importHygieneHistory(await file.text(), tab, type)
+    const required = Object.keys(defaultData[tab])
+    if (![imported.base, ...imported.records.map(item => item.data)].every(section => required.every(key => key in section))) throw new Error('檔案缺少工作欄位')
+    if (!confirm(`匯入會覆蓋「${tabNames[tab]}」的原始版本和全部歷史紀錄，確定繼續嗎？`)) return
+    isSaving.value = true
+    const next = JSON.parse(JSON.stringify(storedData.value))
+    next[tab] = imported.base
+    next.history = normalizeHygieneHistory(next.history)
+    next.history[tab] = imported.records
+    await persistHistoryData(next)
+    d.value[tab] = resolveHygieneSection(storedData.value, tab, selectedDates.value[tab]).section
+    alert('匯入完成。')
+  } catch (error) { alert(`匯入失敗：${error.message}`) } finally { isSaving.value = false }
 }
 
 const addOutArea = () => {
@@ -544,11 +666,14 @@ const saveData = async () => {
   }
   isSaving.value = true
   try {
-    const sanitized = sanitizeHygieneAssignments(d.value)
-    const { error } = await supabase.from('system_settings').upsert({ setting_key: 'hygiene_management_data', setting_value: sanitized }, { onConflict: 'setting_key' })
-    if (error) throw error
-    d.value = sanitized
-    migrationError.value = ''
+    const next = JSON.parse(JSON.stringify(storedData.value))
+    next.isVisibleOnIndex = d.value.isVisibleOnIndex
+    next.nameFontSize = d.value.nameFontSize
+    for (const tab of hygieneTabs) {
+      if (hasUnsavedSection(tab)) next.history = setHygieneRecord(next.history, tab, selectedDates.value[tab], d.value[tab])
+    }
+    await persistHistoryData(next)
+    for (const tab of hygieneTabs) d.value[tab] = resolveHygieneSection(storedData.value, tab, selectedDates.value[tab]).section
     alert('✅ 衛生管理設定已成功儲存！')
     isEditing.value = false
   } catch (error) { alert('❌ 儲存失敗') } finally { isSaving.value = false }
@@ -686,6 +811,25 @@ const generateWord = () => {
 .tab-btn.active { color: #0891b2; border-bottom-color: #0891b2; }
 
 .tips { background: #fffbeb; color: #b45309; padding: 10px 15px; border-radius: 6px; border: 1px dashed #fcd34d; margin-bottom: 20px; font-size: 0.95rem; }
+.history-panel { background: white; border: 1px solid #cbd5e1; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.history-panel p { margin: 8px 0 14px; color: #475569; font-size: 0.9rem; }
+.history-toolbar, .history-actions, .history-selection, .calendar-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.history-toolbar { justify-content: space-between; }
+.history-actions button, .history-selection button, .calendar-header button { padding: 6px 10px; border: 1px solid #0891b2; border-radius: 6px; background: #ecfeff; color: #0e7490; font-weight: 700; cursor: pointer; }
+.calendar-header { justify-content: center; margin-bottom: 8px; }
+.calendar-header button { min-width: 36px; font-size: 1.2rem; }
+.history-calendar { max-width: 560px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin: 0 auto 12px; }
+.history-calendar button, .calendar-weekday { min-height: 35px; text-align: center; }
+.history-calendar button { position: relative; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #334155; cursor: pointer; }
+.history-calendar button.outside-month { color: #94a3b8; }
+.history-calendar button.recorded { border-color: #0e7490; background: #ecfeff; }
+.history-calendar button.selected { background: #0891b2; color: white; }
+.history-calendar button small { position: absolute; right: 3px; bottom: 1px; font-size: 0.55rem; }
+.calendar-weekday { padding-top: 8px; font-weight: 700; color: #64748b; }
+.history-selection { justify-content: center; }
+.history-selection label { display: flex; align-items: center; gap: 6px; }
+.history-selection input { padding: 5px; border: 1px solid #cbd5e1; border-radius: 5px; }
+.history-selection .delete-history { color: #b91c1c; border-color: #fca5a5; background: #fef2f2; }
 .assignment-report { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 15px; margin-bottom: 16px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #334155; }
 .assignment-report strong { color: #0e7490; }
 .report-warning { color: #b91c1c; font-weight: 700; }

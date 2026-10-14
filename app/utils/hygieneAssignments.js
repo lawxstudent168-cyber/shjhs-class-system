@@ -35,16 +35,21 @@ export function assignmentValues(data, tab) {
 export function sanitizeHygieneAssignments(data) {
   if (!data || typeof data !== 'object') return data
   const clean = value => parseSeatAssignments(value).seats.join('、')
-  const morning = { ...(data.morning || {}) }
-  for (const field of morningFields) if (field in morning) morning[field] = clean(morning[field])
-  if (Array.isArray(morning.out_dynamic_areas)) {
-    morning.out_dynamic_areas = morning.out_dynamic_areas.map(item => ({ ...item, names: clean(item?.names) }))
+  const cleanSection = (section, tab) => {
+    const result = { ...(section || {}) }
+    if (tab === 'morning') {
+      for (const field of morningFields) if (field in result) result[field] = clean(result[field])
+      if (Array.isArray(result.out_dynamic_areas)) result.out_dynamic_areas = result.out_dynamic_areas.map(item => ({ ...item, names: clean(item?.names) }))
+    }
+    if (tab === 'lunch') for (const field of lunchFields) if (field in result) result[field] = clean(result[field])
+    if (tab === 'squad') for (const field of squadFields) if (Array.isArray(result[field])) result[field] = result[field].map(clean)
+    return result
   }
-  const lunch = { ...(data.lunch || {}) }
-  for (const field of lunchFields) if (field in lunch) lunch[field] = clean(lunch[field])
-  const squad = { ...(data.squad || {}) }
-  for (const field of squadFields) if (Array.isArray(squad[field])) squad[field] = squad[field].map(clean)
-  return { ...data, morning, lunch, squad }
+  const history = { ...(data.history || {}) }
+  for (const tab of ['morning', 'lunch', 'squad']) {
+    if (Array.isArray(history[tab])) history[tab] = history[tab].map(item => ({ ...item, data: cleanSection(item?.data, tab) }))
+  }
+  return { ...data, morning: cleanSection(data.morning, 'morning'), lunch: cleanSection(data.lunch, 'lunch'), squad: cleanSection(data.squad, 'squad'), history }
 }
 
 export function hygieneAssignmentReport(data, tab, studentSeatNumbers) {
