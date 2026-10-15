@@ -92,6 +92,7 @@
               :todayAttendances="todayAttendances"
               :seatingChart="seatingChart"
               :layoutMode="attendanceLayoutMode"
+              :isUnlocked="isAttendanceUnlocked"
               :expectedCount="expectedCount"
               :presentCount="presentCount"
               :leaveCount="leaveCount"
@@ -101,12 +102,14 @@
               :partialPublicLeaveCount="partialPublicLeaveCount"
               :absentCount="absentCount"
               :privacyFilter="privacyFilter"
-              @toggle-attendance="toggleAttendance"
+              @toggle-attendance="requestAttendanceEdit"
+              @lock-attendance="lockAttendanceBoard"
+              @unlock-attendance="requestAttendanceUnlock"
               @update:layoutMode="setAttendanceLayoutMode"
             />
 
             <div v-if="isIpBrownlisted && !isWeekday" class="weekend-prompt">
-              🌴 今天是週末，點名板僅供查閱，點擊需輸入導師密碼解鎖。
+              🌴 今天是週末，請先由導師解鎖後點名，完成後可按「鎖上」。
             </div>
             
             <HomeEnglishSong 
@@ -188,7 +191,7 @@
       :desc="pwdModalDesc" 
       :target="pwdTarget" 
       :officerPasswords="officerPasswords" 
-      @close="showPwdModal = false" 
+      @close="closePasswordModal"
       @success="handlePwdSuccess" 
     />
     <IdentityModal 
@@ -362,11 +365,23 @@ const scheduleDisplay = computed(() => {
 
 const isClassTime = computed(() => scheduleDisplay.value?.current?.status === '上課中')
 
-const pendingAttendanceStudent = ref(null)
-const toggleAttendance = (student) => {
-  const now = new Date()
-  if (!isWeekday || now.getHours() >= 8) { pendingAttendanceStudent.value = student; openPwdModal('attendance') } 
-  else { toggleAttendanceLogic(student, isWeekday, expectedTeacherPwd.value) }
+const {
+  isAttendanceUnlocked, requestAttendanceEdit, requestAttendanceUnlock,
+  cancelAttendanceUnlock, unlockAttendance, lockAttendance
+} = useAttendanceLock(
+  student => toggleAttendanceLogic(student, isWeekday, expectedTeacherPwd.value, true),
+  () => openPwdModal('attendance')
+)
+
+const closePasswordModal = () => {
+  showPwdModal.value = false
+  if (pwdTarget.value === 'attendance') cancelAttendanceUnlock()
+}
+
+const lockAttendanceBoard = () => {
+  lockAttendance()
+  finishPartialLeave()
+  if (pwdTarget.value === 'attendance') showPwdModal.value = false
 }
 
 const handlePwdSuccess = async ({ target, role }) => {
@@ -380,7 +395,7 @@ const handlePwdSuccess = async ({ target, role }) => {
   }
   else if (target === 'attendance') {
     if (role !== 'teacher' && role !== '導師') return alert('❌ 權限不足：點名板狀態變更僅限導師解鎖！')
-    if (pendingAttendanceStudent.value) { await toggleAttendanceLogic(pendingAttendanceStudent.value, true, expectedTeacherPwd.value, true); pendingAttendanceStudent.value = null }
+    await unlockAttendance(role)
   }
   await logRoleVisit(role)
 }

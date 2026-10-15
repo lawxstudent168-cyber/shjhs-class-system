@@ -15,6 +15,12 @@
       收起點名板 ➔
     </button>
 
+    <div class="attendance-lock-bar">
+      <span role="status">{{ isUnlocked ? '🔓 點名板已解鎖，可連續修改' : '🔒 點名板已鎖定' }}</span>
+      <button v-if="isUnlocked" type="button" @click="$emit('lock-attendance')">鎖上</button>
+      <button v-else type="button" @click="$emit('unlock-attendance')">解鎖</button>
+    </div>
+
     <!-- 📊 頂部統計數據列 -->
     <div class="stats-row">
       <div class="stat-box stat-expected">
@@ -93,6 +99,7 @@ const props = defineProps({
   allStudents: { type: Array, default: () => [] },
   todayAttendances: { type: Array, default: () => [] },
   seatingChart: { type: Object, default: () => ({ seats: [], isRotated: false }) },
+  isUnlocked: { type: Boolean, default: false },
   layoutMode: { type: String, default: 'number' },
   expectedCount: { type: Number, default: 0 },
   presentCount: { type: Number, default: 0 },
@@ -106,7 +113,7 @@ const props = defineProps({
   isClassTime: { type: Boolean, default: false }
 })
 
-defineEmits(['toggle-attendance', 'update:layoutMode'])
+defineEmits(['toggle-attendance', 'update:layoutMode', 'lock-attendance', 'unlock-attendance'])
 
 const seatingLayout = computed(() => attendanceSeatingLayout(props.allStudents, props.seatingChart))
 const flipSeats = ref(false)
@@ -135,6 +142,9 @@ const getStatusClass = (studentId) => {
 </script>
 
 <style scoped>
+.attendance-lock-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; padding: 10px 14px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; color: #334155; }
+.attendance-lock-bar button { flex-shrink: 0; padding: 8px 18px; background: #334155; color: white; border: 0; border-radius: 8px; font: inherit; font-weight: bold; cursor: pointer; }
+.attendance-lock-bar button:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
 .attendance-wrapper { background: transparent; width: 100%; transition: all 0.3s ease; }
 
 /* 💡 讓點名板相對定位，以便裡面的迷你按鈕絕對定位 */

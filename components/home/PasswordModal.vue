@@ -32,7 +32,7 @@ const submit = () => {
   const pwd = pwdInput.value
   const teacherPwd = props.officerPasswords.teacher || '168168168'
 
-  if (props.target === 'emergency') {
+  if (props.target === 'emergency' || props.target === 'attendance') {
     if (pwd === teacherPwd) emit('success', { target: props.target, role: '導師' })
     else alert("❌ 密碼錯誤！")
   } 
