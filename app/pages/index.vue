@@ -98,6 +98,7 @@
               :lateLeaveCount="lateLeaveCount"
               :earlyLeaveCount="earlyLeaveCount"
               :lateCount="lateCount"
+              :partialPublicLeaveCount="partialPublicLeaveCount"
               :absentCount="absentCount"
               :privacyFilter="privacyFilter"
               @toggle-attendance="toggleAttendance"
@@ -213,6 +214,7 @@
       @close="showEmergencyModal = false" 
     />
   </div>
+  <PartialPublicLeaveDialog v-if="partialLeaveStudent" :student-name="partialLeaveStudent.real_name || partialLeaveStudent.hidden_name" @confirm="finishPartialLeave" @cancel="finishPartialLeave()" />
 </template>
 
 <script setup>
@@ -285,7 +287,7 @@ const {
 const { 
   allStudents, allStudentsForLogin, todayAttendances,
   expectedCount, presentCount, leaveCount, lateLeaveCount, earlyLeaveCount, lateCount, absentCount,
-  toggleAttendanceLogic
+  toggleAttendanceLogic, partialPublicLeaveCount, partialLeaveStudent, finishPartialLeave
 } = useAttendance(todayISO)
 
 // 3. 🧠 資料抓取大腦

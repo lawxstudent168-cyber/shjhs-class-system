@@ -20,24 +20,13 @@
       <div class="stat-box stat-expected">
         應到: <strong>{{ expectedCount }}</strong>
       </div>
-      <div class="stat-box stat-present">
-        已到: <strong>{{ presentCount }}</strong>
-      </div>
-      <div class="stat-box stat-leave">
-        全天請假: <strong>{{ leaveCount }}</strong>
-      </div>
-      <div class="stat-box stat-late-leave">
-        晚到請假: <strong>{{ lateLeaveCount }}</strong>
-      </div>
-      <div class="stat-box stat-early-leave">
-        早退請假: <strong>{{ earlyLeaveCount }}</strong>
-      </div>
-      <div class="stat-box stat-late">
-        遲到: <strong>{{ lateCount }}</strong>
-      </div>
-      <div class="stat-box stat-absent">
-        未到: <strong>{{ absentCount }}</strong>
-      </div>
+      <div class="stat-box stat-absent">未到: <strong>{{ absentCount }}</strong></div>
+      <div class="stat-box stat-present">已到: <strong>{{ presentCount }}</strong></div>
+      <div class="stat-box stat-late">遲到: <strong>{{ lateCount }}</strong></div>
+      <div class="stat-box stat-leave">全天請假: <strong>{{ leaveCount }}</strong></div>
+      <div class="stat-box stat-late-leave">晚到請假: <strong>{{ lateLeaveCount }}</strong></div>
+      <div class="stat-box stat-early-leave">早退請假: <strong>{{ earlyLeaveCount }}</strong></div>
+      <div class="stat-box stat-public-leave">部份公假: <strong>{{ partialPublicLeaveCount }}</strong></div>
     </div>
 
     <div class="attendance-tabs" role="tablist" aria-label="點名板排列方式">
@@ -111,6 +100,7 @@ const props = defineProps({
   lateLeaveCount: { type: Number, default: 0 },
   earlyLeaveCount: { type: Number, default: 0 },
   lateCount: { type: Number, default: 0 },
+  partialPublicLeaveCount: { type: Number, default: 0 },
   absentCount: { type: Number, default: 0 },
   privacyFilter: { type: Function, default: (val) => val },
   isClassTime: { type: Boolean, default: false }
@@ -134,6 +124,7 @@ const getStatusText = (studentId) => {
 
 const getStatusClass = (studentId) => {
   const status = getStatusText(studentId)
+  if (status.startsWith('部份公假')) return 'is-public-leave'
   if (status === '已到') return 'is-present'
   if (status === '全天請假' || status === '請假') return 'is-leave'
   if (status.startsWith('晚到請假')) return 'is-late-leave'
@@ -250,6 +241,8 @@ const getStatusClass = (studentId) => {
 .st-num { font-size: 1.1rem; font-weight: bold; margin-bottom: 5px; }
 .st-name { font-size: 1.2rem; font-weight: 900; margin-bottom: 8px; letter-spacing: 1px; }
 .st-status { font-size: 0.9rem; font-weight: bold; white-space: pre-wrap; line-height: 1.3;}
+
+.stat-public-leave, .is-public-leave { background-color: #ccfbf1; border-color: #5eead4; color: #115e59; }
 
 .is-absent { background-color: #fee2e2; border-color: #fca5a5; color: #991b1b; } 
 .is-present { background-color: #dcfce7; border-color: #86efac; color: #14532d; } 

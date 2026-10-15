@@ -9,7 +9,7 @@ export const examStatusPalette = {
 
 export function examAttendanceKind(status) {
   if (status === '已到') return 'present'
-  if (status === '請假' || status === '全天請假') return 'leave'
+  if (status === '請假' || status === '全天請假' || status?.startsWith('部份公假')) return 'leave'
   if (status?.startsWith('晚到請假')) return 'late-leave'
   if (status?.startsWith('早退請假')) return 'early-leave'
   if (status?.startsWith('遲到')) return 'late'

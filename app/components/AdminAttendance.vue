@@ -167,17 +167,17 @@
                 </div>
                 
                 <select v-model="historyAttendances[student.id]" class="status-select">
-                  <option value="未到">未到</option>
-                  <option value="已到">已到</option>
-                  <option value="全天請假">全天請假</option>
-                  <option value="晚到請假">晚到請假</option>
-                  <option value="早退請假">早退請假</option>
-                  <option value="遲到">遲到</option>
+                  <option v-for="status in attendanceStatusOrder" :key="status" :value="status">{{ status }}</option>
+                </select>
+
+                <select v-if="historyAttendances[student.id] === '部份公假'" v-model="historyPublicLeaveDirections[student.id]" class="status-select" aria-label="公假入班或離班">
+                  <option value="入班">入班</option>
+                  <option value="離班">離班</option>
                 </select>
 
                 <!-- 💡 遲到、晚到、早退 的共用時間輸入框 -->
                 <input 
-                  v-if="['遲到', '晚到請假', '早退請假'].includes(historyAttendances[student.id])" 
+                  v-if="['遲到', '晚到請假', '早退請假', '部份公假'].includes(historyAttendances[student.id])"
                   type="time" 
                   v-model="historyLateTimes[student.id]" 
                   class="late-time-input"
@@ -197,6 +197,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { attendanceStatusOrder, parseAttendanceStatus, formatAttendanceStatus } from '../utils/attendanceStatus.js'
 const supabase = useSupabaseClient()
 const dDate = new Date(); 
 const todayISO = `${dDate.getFullYear()}-${String(dDate.getMonth()+1).padStart(2,'0')}-${String(dDate.getDate()).padStart(2,'0')}`
@@ -212,6 +213,7 @@ const calMonth = ref(dDate.getMonth())
 const monthAttendanceDates = ref(new Set())
 const selectedHistoryDate = ref('')
 const historyAttendances = ref({}) 
+const historyPublicLeaveDirections = ref({})
 const historyLateTimes = ref({}) 
 const isSavingHistory = ref(false)
 
@@ -332,7 +334,7 @@ const getSimAttendanceClass = (studentId) => {
 // 💡 五格統計：全面支援帶有時間的解析
 const expectedCount = computed(() => adminStudents.value.length)
 const presentCount = computed(() => todayAttendances.value.filter(a => a.status === '已到').length)
-const leaveCount = computed(() => todayAttendances.value.filter(a => a.status && (a.status === '請假' || a.status === '全天請假' || a.status.startsWith('晚到請假') || a.status.startsWith('早退請假'))).length)
+const leaveCount = computed(() => todayAttendances.value.filter(a => a.status && (a.status === '請假' || a.status === '全天請假' || a.status.startsWith('晚到請假') || a.status.startsWith('早退請假') || a.status.startsWith('部份公假'))).length)
 const lateCount = computed(() => todayAttendances.value.filter(a => a.status && a.status.startsWith('遲到')).length)
 const absentCount = computed(() => expectedCount.value - presentCount.value - leaveCount.value - lateCount.value)
 
@@ -342,6 +344,7 @@ const getStatusLabel = (studentId) => {
   if (!record || !record.status) return '未到'
   const s = record.status
   if (s.startsWith('遲到')) return '遲到'
+  if (s.startsWith('部份公假')) return '請假'
   if (s.includes('請假')) return '請假'
   if (s === '已到') return '已到'
   return '未到'
@@ -460,47 +463,34 @@ const viewHistory = async (day) => {
   const { data } = await supabase.from('attendances').select('*').eq('record_date', day.dateStr)
   
   const newHistory = {}
+  const newDirections = {}
   const newLateTimes = {} 
 
   adminStudents.value.forEach(s => {
     newHistory[s.id] = '未到'
+    newDirections[s.id] = '入班'
     newLateTimes[s.id] = ''
   }) 
 
   // 💡 智慧解析：自動剝離資料庫中帶有時間的字串
   if (data) {
     data.forEach(a => {
-      const statusStr = a.status || '未到'
-      
-      if (statusStr.startsWith('遲到')) {
-        newHistory[a.student_id] = '遲到'
-        newLateTimes[a.student_id] = statusStr.split('_')[1] || ''
-      } else if (statusStr.startsWith('晚到請假')) {
-        newHistory[a.student_id] = '晚到請假'
-        const match = statusStr.match(/\((.*?)\)/)
-        newLateTimes[a.student_id] = match ? match[1] : ''
-      } else if (statusStr.startsWith('早退請假')) {
-        newHistory[a.student_id] = '早退請假'
-        const match = statusStr.match(/\((.*?)\)/)
-        newLateTimes[a.student_id] = match ? match[1] : ''
-      } else if (statusStr === '請假' || statusStr === '全天請假') {
-        newHistory[a.student_id] = '全天請假'
-        newLateTimes[a.student_id] = ''
-      } else {
-        newHistory[a.student_id] = statusStr
-        newLateTimes[a.student_id] = ''
-      }
+      const { base, time, direction } = parseAttendanceStatus(a.status)
+      newHistory[a.student_id] = base
+      newLateTimes[a.student_id] = time
+      newDirections[a.student_id] = direction
     })
   }
   
   historyAttendances.value = newHistory
   historyLateTimes.value = newLateTimes
+  historyPublicLeaveDirections.value = newDirections
 }
 
 // 💡 根據大類決定卡片顏色
 const getHistoryCardClass = (status) => {
   if (status === '已到') return 'card-present'
-  if (status === '全天請假' || status === '晚到請假' || status === '早退請假' || status === '請假') return 'card-leave'
+  if (status === '全天請假' || status === '晚到請假' || status === '早退請假' || status === '部份公假' || status === '請假') return 'card-leave'
   if (status === '遲到') return 'card-late'
   return 'card-absent'
 }
@@ -508,26 +498,26 @@ const getHistoryCardClass = (status) => {
 const saveHistory = async () => {
   isSavingHistory.value = true
   try {
-    const { data: existing } = await supabase.from('attendances').select('id, student_id').eq('record_date', selectedHistoryDate.value)
+    for (const student of adminStudents.value) {
+      formatAttendanceStatus(historyAttendances.value[student.id] || '未到', historyLateTimes.value[student.id], historyPublicLeaveDirections.value[student.id])
+    }
+    const { data: existing, error: lookupError } = await supabase.from('attendances').select('id, student_id').eq('record_date', selectedHistoryDate.value)
+    if (lookupError) throw lookupError
     
     for (const student of adminStudents.value) {
       const baseStatus = historyAttendances.value[student.id] || '未到'
       
-      // 💡 寫回資料庫前，將時間與標籤完美組裝
-      let finalStatus = baseStatus
-      const timeVal = historyLateTimes.value[student.id]
-      
-      if (baseStatus === '遲到' && timeVal) finalStatus = `遲到_${timeVal}`
-      else if (baseStatus === '晚到請假' && timeVal) finalStatus = `晚到請假(${timeVal})`
-      else if (baseStatus === '早退請假' && timeVal) finalStatus = `早退請假(${timeVal})`
-      
+      const finalStatus = formatAttendanceStatus(baseStatus, historyLateTimes.value[student.id], historyPublicLeaveDirections.value[student.id])
+
       const existRecord = existing ? existing.find(e => e.student_id === student.id) : null
       
       if (existRecord) {
-        await supabase.from('attendances').update({ status: finalStatus }).eq('id', existRecord.id)
+        const { error } = await supabase.from('attendances').update({ status: finalStatus }).eq('id', existRecord.id)
+        if (error) throw error
       } else {
         if (finalStatus !== '未到') {
-           await supabase.from('attendances').insert({ student_id: student.id, record_date: selectedHistoryDate.value, status: finalStatus })
+           const { error } = await supabase.from('attendances').insert({ student_id: student.id, record_date: selectedHistoryDate.value, status: finalStatus })
+           if (error) throw error
         }
       }
     }
