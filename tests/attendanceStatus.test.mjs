@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { attendanceStatusOrder, nextAttendanceStatus, parseAttendanceStatus, formatAttendanceStatus } from '../app/utils/attendanceStatus.js'
+import { attendanceStatusOrder, nextAttendanceStatus, parseAttendanceStatus, formatAttendanceStatus, displayAttendanceStatus } from '../app/utils/attendanceStatus.js'
 import { summarizeExamAttendance } from '../app/utils/examAttendance.js'
 
 test('attendance cycles in requested order, including saved times and legacy leave', () => {
@@ -10,8 +10,9 @@ test('attendance cycles in requested order, including saved times and legacy lea
     status = nextAttendanceStatus(status)
     seen.push(status)
   }
-  assert.deepEqual(seen, ['未到', '已到', '遲到', '全天請假', '晚到請假', '早退請假', '部份公假'])
-  assert.equal(nextAttendanceStatus('部份公假(離班 14:00)'), '未到')
+  assert.deepEqual(seen, ['未到', '已到', '遲到', '全天請假', '晚到請假', '早退請假', '部份公假', '全天公假'])
+  assert.equal(nextAttendanceStatus('部份公假(離班 14:00)'), '全天公假')
+  assert.equal(nextAttendanceStatus('全天公假'), '未到')
   assert.equal(nextAttendanceStatus('遲到_08:15'), '全天請假')
   assert.equal(nextAttendanceStatus('請假'), '晚到請假')
   assert.equal(nextAttendanceStatus('早退請假(14:00)'), '部份公假')
@@ -40,4 +41,17 @@ test('exam summaries count partial public leave as leave rather than absent', ()
   assert.equal(summary.absent, 0)
   assert.equal(summary.leave, 1)
   assert.deepEqual(summary.leaveSeats, [1])
+})
+
+test('legacy partial leave displays time before direction without a database migration', () => {
+  assert.equal(displayAttendanceStatus('部份公假(離班 14:00)'), '部份公假(14:00 離班)')
+  assert.equal(displayAttendanceStatus('部份公假(10:00 入班)'), '部份公假(10:00 入班)')
+})
+
+test('full-day public leave retains its own status and is excluded from exam absences', () => {
+  assert.equal(formatAttendanceStatus('全天公假'), '全天公假')
+  assert.equal(parseAttendanceStatus('全天公假').base, '全天公假')
+  const summary = summarizeExamAttendance([{ id: 's1', seat_number: 1 }], [{ student_id: 's1', status: '全天公假' }])
+  assert.equal(summary.absent, 0)
+  assert.equal(summary.leave, 1)
 })

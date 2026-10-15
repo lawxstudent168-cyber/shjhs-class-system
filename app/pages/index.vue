@@ -100,6 +100,7 @@
               :earlyLeaveCount="earlyLeaveCount"
               :lateCount="lateCount"
               :partialPublicLeaveCount="partialPublicLeaveCount"
+              :fullPublicLeaveCount="fullPublicLeaveCount"
               :absentCount="absentCount"
               :privacyFilter="privacyFilter"
               @toggle-attendance="requestAttendanceEdit"
@@ -217,7 +218,7 @@
       @close="showEmergencyModal = false" 
     />
   </div>
-  <PartialPublicLeaveDialog v-if="partialLeaveStudent" :student-name="partialLeaveStudent.real_name || partialLeaveStudent.hidden_name" @confirm="finishPartialLeave" @cancel="finishPartialLeave()" />
+  <AttendanceTimeDialog v-if="attendanceTimeRequest" :student-name="attendanceTimeRequest.student.real_name || attendanceTimeRequest.student.hidden_name" :status="attendanceTimeRequest.status" :initial-time="attendanceTimeRequest.initialTime" @confirm="finishAttendanceTime" @cancel="finishAttendanceTime()" />
 </template>
 
 <script setup>
@@ -290,7 +291,7 @@ const {
 const { 
   allStudents, allStudentsForLogin, todayAttendances,
   expectedCount, presentCount, leaveCount, lateLeaveCount, earlyLeaveCount, lateCount, absentCount,
-  toggleAttendanceLogic, partialPublicLeaveCount, partialLeaveStudent, finishPartialLeave
+  toggleAttendanceLogic, partialPublicLeaveCount, fullPublicLeaveCount, attendanceTimeRequest, finishAttendanceTime
 } = useAttendance(todayISO)
 
 // 3. 🧠 資料抓取大腦
@@ -380,7 +381,7 @@ const closePasswordModal = () => {
 
 const lockAttendanceBoard = () => {
   lockAttendance()
-  finishPartialLeave()
+  finishAttendanceTime()
   if (pwdTarget.value === 'attendance') showPwdModal.value = false
 }
 

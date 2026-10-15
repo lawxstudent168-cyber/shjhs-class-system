@@ -175,13 +175,10 @@
                   <option value="離班">離班</option>
                 </select>
 
-                <!-- 💡 遲到、晚到、早退 的共用時間輸入框 -->
-                <input 
+                <AttendanceTimeSelect
                   v-if="['遲到', '晚到請假', '早退請假', '部份公假'].includes(historyAttendances[student.id])"
-                  type="time" 
-                  v-model="historyLateTimes[student.id]" 
-                  class="late-time-input"
-                  title="設定狀態時間" 
+                  v-model="historyLateTimes[student.id]"
+                  allow-empty
                 />
               </div>
             </div>
@@ -197,7 +194,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { attendanceStatusOrder, parseAttendanceStatus, formatAttendanceStatus } from '../utils/attendanceStatus.js'
+import { attendanceStatusOrder, parseAttendanceStatus, formatAttendanceStatus, displayAttendanceStatus } from '../utils/attendanceStatus.js'
 const supabase = useSupabaseClient()
 const dDate = new Date(); 
 const todayISO = `${dDate.getFullYear()}-${String(dDate.getMonth()+1).padStart(2,'0')}-${String(dDate.getDate()).padStart(2,'0')}`
@@ -334,7 +331,7 @@ const getSimAttendanceClass = (studentId) => {
 // 💡 五格統計：全面支援帶有時間的解析
 const expectedCount = computed(() => adminStudents.value.length)
 const presentCount = computed(() => todayAttendances.value.filter(a => a.status === '已到').length)
-const leaveCount = computed(() => todayAttendances.value.filter(a => a.status && (a.status === '請假' || a.status === '全天請假' || a.status.startsWith('晚到請假') || a.status.startsWith('早退請假') || a.status.startsWith('部份公假'))).length)
+const leaveCount = computed(() => todayAttendances.value.filter(a => a.status && (a.status === '請假' || a.status === '全天請假' || a.status.startsWith('晚到請假') || a.status.startsWith('早退請假') || a.status.startsWith('部份公假') || a.status === '全天公假')).length)
 const lateCount = computed(() => todayAttendances.value.filter(a => a.status && a.status.startsWith('遲到')).length)
 const absentCount = computed(() => expectedCount.value - presentCount.value - leaveCount.value - lateCount.value)
 
@@ -344,7 +341,7 @@ const getStatusLabel = (studentId) => {
   if (!record || !record.status) return '未到'
   const s = record.status
   if (s.startsWith('遲到')) return '遲到'
-  if (s.startsWith('部份公假')) return '請假'
+  if (s.startsWith('部份公假') || s === '全天公假') return '請假'
   if (s.includes('請假')) return '請假'
   if (s === '已到') return '已到'
   return '未到'
@@ -356,7 +353,7 @@ const getStatusDisplay = (studentId) => {
   if (!record || !record.status) return '未到'
   const s = record.status
   if (s.startsWith('遲到_')) return `遲到 (${s.split('_')[1]})`
-  return s // 晚到與早退已經自帶括號
+  return displayAttendanceStatus(s)
 }
 
 const targetStudentsList = computed(() => {
@@ -490,7 +487,7 @@ const viewHistory = async (day) => {
 // 💡 根據大類決定卡片顏色
 const getHistoryCardClass = (status) => {
   if (status === '已到') return 'card-present'
-  if (status === '全天請假' || status === '晚到請假' || status === '早退請假' || status === '部份公假' || status === '請假') return 'card-leave'
+  if (status === '全天請假' || status === '晚到請假' || status === '早退請假' || status === '部份公假' || status === '全天公假' || status === '請假') return 'card-leave'
   if (status === '遲到') return 'card-late'
   return 'card-absent'
 }

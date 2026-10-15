@@ -38,6 +38,7 @@
       <div class="stat-box stat-late-leave">晚到請假: <strong>{{ lateLeaveCount }}</strong></div>
       <div class="stat-box stat-early-leave">早退請假: <strong>{{ earlyLeaveCount }}</strong></div>
       <div class="stat-box stat-public-leave">部份公假: <strong>{{ partialPublicLeaveCount }}</strong></div>
+      <div class="stat-box stat-public-leave">全天公假: <strong>{{ fullPublicLeaveCount }}</strong></div>
     </div>
 
     <div class="attendance-tabs" role="tablist" aria-label="點名板排列方式">
@@ -98,6 +99,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { displayAttendanceStatus } from '../../app/utils/attendanceStatus.js'
 import { attendanceSeatingLayout } from '../../app/utils/attendanceSeating.js'
 
 const props = defineProps({
@@ -112,6 +114,7 @@ const props = defineProps({
   lateLeaveCount: { type: Number, default: 0 },
   earlyLeaveCount: { type: Number, default: 0 },
   lateCount: { type: Number, default: 0 },
+  fullPublicLeaveCount: { type: Number, default: 0 },
   partialPublicLeaveCount: { type: Number, default: 0 },
   absentCount: { type: Number, default: 0 },
   privacyFilter: { type: Function, default: (val) => val },
@@ -131,12 +134,12 @@ watch(() => props.isClassTime, (newIsClassTime) => {
 
 const getStatusText = (studentId) => {
   const record = props.todayAttendances.find(a => a.student_id === studentId)
-  return record?.status || '未到'
+  return displayAttendanceStatus(record?.status)
 }
 
 const getStatusClass = (studentId) => {
   const status = getStatusText(studentId)
-  if (status.startsWith('部份公假')) return 'is-public-leave'
+  if ((status.startsWith('部份公假') || status === '全天公假')) return 'is-public-leave'
   if (status === '已到') return 'is-present'
   if (status === '全天請假' || status === '請假') return 'is-leave'
   if (status.startsWith('晚到請假')) return 'is-late-leave'

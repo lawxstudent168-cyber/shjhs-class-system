@@ -1,15 +1,15 @@
 <template>
-  <dialog ref="dialog" aria-labelledby="partial-leave-title" @cancel.prevent="$emit('cancel')" @click="closeOnBackdrop">
+  <dialog ref="dialog" aria-labelledby="attendance-time-title" @cancel.prevent="$emit('cancel')" @click="closeOnBackdrop">
     <form @submit.prevent="$emit('confirm', { direction, time })">
-      <h3 id="partial-leave-title">部份公假</h3>
+      <h3 id="attendance-time-title">{{ status }}</h3>
       <p>{{ studentName }}</p>
-      <label>入班／離班
-        <select v-model="direction" autofocus>
+      <label v-if="status === '部份公假'">入班／離班
+        <select v-model="direction">
           <option value="入班">入班</option>
           <option value="離班">離班</option>
         </select>
       </label>
-      <label>時間 <input v-model="time" type="time" required /></label>
+      <label>時間 <AttendanceTimeSelect v-model="time" /></label>
       <div class="actions">
         <button type="button" @click="$emit('cancel')">取消</button>
         <button type="submit" class="confirm">確定</button>
@@ -20,11 +20,15 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-defineProps({ studentName: { type: String, default: '' } })
+const props = defineProps({
+  studentName: { type: String, default: '' },
+  status: { type: String, default: '部份公假' },
+  initialTime: { type: String, default: '10:00' }
+})
 const emit = defineEmits(['confirm', 'cancel'])
 const dialog = ref(null)
 const direction = ref('入班')
-const time = ref('10:00')
+const time = ref(props.initialTime)
 onMounted(() => dialog.value.showModal())
 const closeOnBackdrop = event => {
   if (event.target !== dialog.value) return

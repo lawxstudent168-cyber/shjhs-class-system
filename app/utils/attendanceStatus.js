@@ -1,4 +1,4 @@
-export const attendanceStatusOrder = ['未到', '已到', '遲到', '全天請假', '晚到請假', '早退請假', '部份公假']
+export const attendanceStatusOrder = ['未到', '已到', '遲到', '全天請假', '晚到請假', '早退請假', '部份公假', '全天公假']
 
 export function parseAttendanceStatus(status = '未到') {
   status = status || '未到'
@@ -17,10 +17,16 @@ export function nextAttendanceStatus(status) {
 export function formatAttendanceStatus(base, time = '', direction = '入班') {
   if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error('請輸入有效時間（HH:mm）')
   if (base === '部份公假') {
-    if (!time || !['入班', '離班'].includes(direction)) throw new Error('部份公假請選擇入班／離班並填寫時間')
-    return `部份公假(${direction} ${time})`
+    if (!time || !['入班', '離班'].includes(direction)) throw new Error('部份公假請選擇入班／離班並選擇時間')
+    return `部份公假(${time} ${direction})`
   }
   if (base === '遲到' && time) return `遲到_${time}`
   if (['晚到請假', '早退請假'].includes(base) && time) return `${base}(${time})`
   return base
+}
+
+export function displayAttendanceStatus(status) {
+  if (!status?.startsWith('部份公假')) return status || '未到'
+  const { base, time, direction } = parseAttendanceStatus(status)
+  return time ? formatAttendanceStatus(base, time, direction) : status
 }

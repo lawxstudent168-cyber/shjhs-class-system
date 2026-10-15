@@ -29,22 +29,38 @@ test('partial public leave persists both directions, counts correctly, and cance
     for (const direction of ['入班', '離班']) {
       attendance.todayAttendances.value = [{ student_id: 's1', status: '早退請假(14:00)' }]
       const pending = attendance.toggleAttendanceLogic(student, true, '', true)
-      assert.equal(attendance.partialLeaveStudent.value.id, 's1')
-      attendance.finishPartialLeave({ direction, time: '10:30' })
+      assert.equal(attendance.attendanceTimeRequest.value.student.id, 's1')
+      attendance.finishAttendanceTime({ direction, time: '10:30' })
       await pending
-      assert.equal(writes.at(-1).status, `部份公假(${direction} 10:30)`)
+      assert.equal(writes.at(-1).status, `部份公假(10:30 ${direction})`)
       assert.equal(attendance.partialPublicLeaveCount.value, 1)
       assert.equal(attendance.absentCount.value, 0)
     }
     attendance.todayAttendances.value[0].status = '早退請假(14:00)'
     const pending = attendance.toggleAttendanceLogic(student, true, '', true)
-    attendance.finishPartialLeave()
+    attendance.finishAttendanceTime()
     await pending
     assert.equal(writes.length, 2)
     assert.equal(attendance.todayAttendances.value[0].status, '早退請假(14:00)')
+    for (const [status, next] of [['已到', '遲到'], ['全天請假', '晚到請假'], ['晚到請假(10:00)', '早退請假']]) {
+      attendance.todayAttendances.value[0].status = status
+      const pendingTime = attendance.toggleAttendanceLogic(student, true, '', true)
+      assert.equal(attendance.attendanceTimeRequest.value.status, next)
+      attendance.finishAttendanceTime({ time: '09:30' })
+      await pendingTime
+      assert.match(writes.at(-1).status, /09:30/)
+    }
+    attendance.todayAttendances.value[0].status = '部份公假(14:00 離班)'
+    await attendance.toggleAttendanceLogic(student, true, '', true)
+    assert.equal(writes.at(-1).status, '全天公假')
+    assert.equal(attendance.fullPublicLeaveCount.value, 1)
+    assert.equal(attendance.absentCount.value, 0)
+    await attendance.toggleAttendanceLogic(student, true, '', true)
+    assert.equal(writes.at(-1).status, '未到')
+    attendance.todayAttendances.value[0].status = '早退請假(14:00)'
     failWrite = true
     const failing = attendance.toggleAttendanceLogic(student, true, '', true)
-    attendance.finishPartialLeave({ direction: '離班', time: '14:30' })
+    attendance.finishAttendanceTime({ direction: '離班', time: '14:30' })
     await failing
     assert.equal(attendance.todayAttendances.value[0].status, '早退請假(14:00)')
     assert.match(alerts.at(-1), /write denied/)

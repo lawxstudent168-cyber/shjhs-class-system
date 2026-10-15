@@ -9,14 +9,14 @@ export function useAttendance(todayISO) {
   const allStudentsForLogin = ref([])
   const todayAttendances = ref([])
 
-  const partialLeaveStudent = ref(null)
-  let resolvePartialLeave
-  const finishPartialLeave = (value = null) => {
-    partialLeaveStudent.value = null
-    resolvePartialLeave?.(value)
-    resolvePartialLeave = null
+  const attendanceTimeRequest = ref(null)
+  let resolveAttendanceTime
+  const finishAttendanceTime = (value = null) => {
+    attendanceTimeRequest.value = null
+    resolveAttendanceTime?.(value)
+    resolveAttendanceTime = null
   }
-  onScopeDispose(() => finishPartialLeave())
+  onScopeDispose(() => finishAttendanceTime())
 
   const expectedCount = computed(() => allStudents.value.length)
   const presentCount = computed(() => todayAttendances.value.filter(a => a.status === '已到').length)
@@ -25,7 +25,8 @@ export function useAttendance(todayISO) {
   const earlyLeaveCount = computed(() => todayAttendances.value.filter(a => a.status && a.status.startsWith('早退請假')).length)
   const lateCount = computed(() => todayAttendances.value.filter(a => a.status && a.status.startsWith('遲到')).length)
   const partialPublicLeaveCount = computed(() => todayAttendances.value.filter(a => a.status?.startsWith('部份公假')).length)
-  const absentCount = computed(() => expectedCount.value - presentCount.value - leaveCount.value - lateLeaveCount.value - earlyLeaveCount.value - lateCount.value - partialPublicLeaveCount.value)
+  const fullPublicLeaveCount = computed(() => todayAttendances.value.filter(a => a.status === '全天公假').length)
+  const absentCount = computed(() => expectedCount.value - presentCount.value - leaveCount.value - lateLeaveCount.value - earlyLeaveCount.value - lateCount.value - partialPublicLeaveCount.value - fullPublicLeaveCount.value)
 
   // 💡 核心修正 1：加入 skipPasswordCheck (跳過密碼檢查) 通行證
   const toggleAttendanceLogic = async (student, isWeekday, expectedTeacherPwd, skipPasswordCheck = false) => {
@@ -52,18 +53,12 @@ export function useAttendance(todayISO) {
 
     const currentStatusFull = todayAttendances.value.find(a => a.student_id === student.id)?.status || '未到'
     let nextStatus = nextAttendanceStatus(currentStatusFull)
-    if (['遲到', '晚到請假', '早退請假'].includes(nextStatus)) {
-      const defaults = { 遲到: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, 晚到請假: '10:00', 早退請假: '14:00' }
-      const labels = { 遲到: '遲到到校', 晚到請假: '預計到校', 早退請假: '早退離開' }
-      const time = prompt(`請輸入【${labels[nextStatus]}】時間 (HH:mm)：`, defaults[nextStatus])
-      if (time === null) return
-      try { nextStatus = formatAttendanceStatus(nextStatus, time.trim()) }
-      catch (error) { alert(error.message); return }
-    } else if (nextStatus === '部份公假') {
-      if (partialLeaveStudent.value) return
+    if (['遲到', '晚到請假', '早退請假', '部份公假'].includes(nextStatus)) {
+      if (attendanceTimeRequest.value) return
+      const defaults = { 遲到: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, 晚到請假: '10:00', 早退請假: '14:00', 部份公假: '10:00' }
       const details = await new Promise(resolve => {
-        resolvePartialLeave = resolve
-        partialLeaveStudent.value = student
+        resolveAttendanceTime = resolve
+        attendanceTimeRequest.value = { student, status: nextStatus, initialTime: defaults[nextStatus] }
       })
       if (!details) return
       try { nextStatus = formatAttendanceStatus(nextStatus, details.time, details.direction) }
@@ -88,6 +83,6 @@ export function useAttendance(todayISO) {
   return {
     allStudents, allStudentsForLogin, todayAttendances,
     expectedCount, presentCount, leaveCount, lateLeaveCount, earlyLeaveCount, lateCount, absentCount,
-    toggleAttendanceLogic, partialPublicLeaveCount, partialLeaveStudent, finishPartialLeave
+    toggleAttendanceLogic, partialPublicLeaveCount, fullPublicLeaveCount, attendanceTimeRequest, finishAttendanceTime
   }
 }
