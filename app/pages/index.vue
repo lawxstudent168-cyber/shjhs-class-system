@@ -239,6 +239,7 @@ import HomeWikiFeatured from '~~/components/home/HomeWikiFeatured.vue'
 import HomeEnglishSong from '~~/components/home/HomeEnglishSong.vue'
 import HomeGoodArticle from '~~/components/home/HomeGoodArticle.vue'
 import HomeStudentAssignments from '~~/components/home/HomeStudentAssignments.vue' 
+import { isAttendancePasswordFree } from '~/utils/attendanceAccess.js'
 import { normalizeClassNotes } from '~/utils/classNotes.js'
 import { isValidExamDate, taiwanDateISO, taiwanClockHHMMSS } from '~/utils/examSchedule.js'
 import { isVideoBlackoutTime } from '~/utils/videoBlackout.js'
@@ -301,7 +302,7 @@ const {
   scheduleData, scheduleButtonConfig, examData, autoRefreshConfig, indexModulesConfig, indexDynamicSorting, isWikiFeaturedVisible,
   youtubeSchedule, youtubeIsMuted, youtubeBlockedDates, englishSongSchedule, parentNotices, classNoteItems, allClassNoteItems, seatingChart, hygieneData,
   marqueeSettings, unreadMsgCount, assignmentsData, assignmentSubmissionsData, excludedAssignmentIds, goodArticles,
-  expectedTeacherPwd, loadTeacherPwd, fetchData
+  expectedTeacherPwd, attendanceLockTime, loadTeacherPwd, fetchData
 } = useHomeData(supabase, todayISO, isIpBrownlisted, activeRoleCategory, currentIdentity, allStudents, allStudentsForLogin, todayAttendances, nowTick)
 
 // 4. ✨ 格式化與過濾器 (有了前面的 ref，現在可以呼叫了)
@@ -371,7 +372,8 @@ const {
   cancelAttendanceUnlock, unlockAttendance, lockAttendance
 } = useAttendanceLock(
   student => toggleAttendanceLogic(student, isWeekday, expectedTeacherPwd.value, true),
-  () => openPwdModal('attendance')
+  () => openPwdModal('attendance'),
+  () => isAttendancePasswordFree(nowTick.value, attendanceLockTime.value)
 )
 
 const closePasswordModal = () => {

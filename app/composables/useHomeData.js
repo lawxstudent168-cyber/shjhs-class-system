@@ -1,4 +1,5 @@
 import { ref, computed, unref } from 'vue'
+import { normalizeAttendanceLockTime } from '../utils/attendanceAccess.js'
 import { displayedExamSchedule, normalizeExamSchedule, taiwanDateISO } from '../utils/examSchedule.js'
 import { normalizeClassNotes, weeklyClassNotes } from '../utils/classNotes.js'
 import { resolveSeatingLayout } from '../utils/seatingSchedule.js'
@@ -7,6 +8,7 @@ import { sanitizeHygieneAssignments } from '../utils/hygieneAssignments.js'
 import { resolveHygieneForDate } from '../utils/hygieneHistory.js'
 
 export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCategoryRef, currentIdentityRef, allStudentsRef, allStudentsForLoginRef, todayAttendancesRef, nowTickRef) {
+  const attendanceLockTime = ref('08:00')
   const contactBookItems = ref([])
   const officerPasswords = ref({ academic: '', counseling: '', discipline: '', teacher: '168168168' })
   const isHistoryVisibleOnIndex = ref(false)
@@ -87,7 +89,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
     contactBookItems.value = boardData?.contact_items || []
 
     const keysToFetch = [
-      'board_officer_passwords', 'seating_chart_data', 'hygiene_management_data', 
+      'attendance_lock_time', 'board_officer_passwords', 'seating_chart_data', 'hygiene_management_data',
       'contact_history_visible', 'index_button_settings', 'announcements_data', 
       'class_schedule_data', 'exam_schedule_data', 'parent_notices_data', 
       'class_notes_data', 'announcement_board_visible', 'parent_notices_board_visible',
@@ -107,6 +109,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
           if (v === null || v === undefined) return
           
           switch (s.setting_key) {
+            case 'attendance_lock_time': attendanceLockTime.value = normalizeAttendanceLockTime(v); break;
             case 'excluded_assignment_ids_from_report': excludedAssignmentIds.value = v || []; break
             case 'good_articles_data': goodArticles.value = Array.isArray(v) ? v : []; break
             case 'board_officer_passwords': officerPasswords.value = { ...officerPasswords.value, ...v }; break
@@ -213,6 +216,6 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
     scheduleData, scheduleButtonConfig, examData, autoRefreshConfig, indexModulesConfig, indexDynamicSorting, isWikiFeaturedVisible,
     youtubeSchedule, youtubeIsMuted, youtubeBlockedDates, englishSongSchedule, parentNotices, classNoteItems, allClassNoteItems, seatingChart, hygieneData,
     marqueeSettings, unreadMsgCount, assignmentsData, assignmentSubmissionsData, excludedAssignmentIds, goodArticles,
-    expectedTeacherPwd, loadTeacherPwd, fetchData
+    expectedTeacherPwd, attendanceLockTime, loadTeacherPwd, fetchData
   }
 }

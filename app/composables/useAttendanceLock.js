@@ -1,8 +1,15 @@
-import { ref } from 'vue'
+import { ref, computed, toValue, watch } from 'vue'
 
 // Keep permission in this page only; never persist a password or unlocked flag.
-export function useAttendanceLock(editAttendance, requestPassword) {
-  const isAttendanceUnlocked = ref(false)
+export function useAttendanceLock(editAttendance, requestPassword, passwordFree = false) {
+  const teacherUnlocked = ref(false)
+  const manuallyLocked = ref(false)
+  const isPasswordFree = computed(() => Boolean(toValue(passwordFree)))
+  const isAttendanceUnlocked = computed(() => teacherUnlocked.value || (isPasswordFree.value && !manuallyLocked.value))
+  // A new morning starts a fresh session; yesterday's override must not bypass today's cutoff.
+  watch(isPasswordFree, free => {
+    if (free) { teacherUnlocked.value = false; manuallyLocked.value = false }
+  }, { flush: 'sync' })
   let pendingStudent = null
 
   const requestAttendanceEdit = async student => {
@@ -20,7 +27,8 @@ export function useAttendanceLock(editAttendance, requestPassword) {
 
   const unlockAttendance = async role => {
     if (role !== 'teacher' && role !== '導師') return false
-    isAttendanceUnlocked.value = true
+    teacherUnlocked.value = true
+    manuallyLocked.value = false
     const student = pendingStudent
     pendingStudent = null
     if (student) await editAttendance(student)
@@ -28,7 +36,8 @@ export function useAttendanceLock(editAttendance, requestPassword) {
   }
 
   const lockAttendance = () => {
-    isAttendanceUnlocked.value = false
+    teacherUnlocked.value = false
+    manuallyLocked.value = true
     pendingStudent = null
   }
 

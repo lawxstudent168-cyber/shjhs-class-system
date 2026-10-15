@@ -16,7 +16,7 @@
         <!-- 鎖定時間設定 -->
         <div class="setting-box">
           <h5>🕒 設定自動鎖定時間</h5>
-          <p class="help-text">超過此時間後，首頁的點名表將自動鎖定，必須輸入導師密碼才能修改。</p>
+          <p class="help-text">週一至週五此時間前免密碼點名（預設 08:00，台灣時間）；到達此時間或週末須由導師解鎖，完成後可手動鎖上。</p>
           <div class="lock-time-input-group">
             <input type="time" v-model="lockTime" class="time-input" />
             <button @click="saveLockTime" class="save-lock-btn" :disabled="isSavingLockTime">
@@ -194,6 +194,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { normalizeAttendanceLockTime, isAttendancePasswordFree } from '../utils/attendanceAccess.js'
 import { attendanceStatusOrder, parseAttendanceStatus, formatAttendanceStatus, displayAttendanceStatus } from '../utils/attendanceStatus.js'
 const supabase = useSupabaseClient()
 const dDate = new Date(); 
@@ -214,7 +215,7 @@ const historyPublicLeaveDirections = ref({})
 const historyLateTimes = ref({}) 
 const isSavingHistory = ref(false)
 
-const lockTime = ref('08:10')
+const lockTime = ref('08:00')
 const isSavingLockTime = ref(false)
 const simDate = ref(todayISO)
 const simTime = ref('08:15')
@@ -227,7 +228,7 @@ const fetchData = async () => {
   
   const { data: lockData } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'attendance_lock_time').maybeSingle()
   if (lockData && lockData.setting_value) {
-    lockTime.value = lockData.setting_value
+    lockTime.value = normalizeAttendanceLockTime(lockData.setting_value)
   }
 
   const { data: sData } = await supabase.from('students').select('*').order('seat_number')
@@ -251,10 +252,11 @@ const fetchData = async () => {
 onMounted(() => fetchData())
 
 const saveLockTime = async () => {
-  if (!lockTime.value) return alert('請填寫有效時間！')
+  if (!lockTime.value || normalizeAttendanceLockTime(lockTime.value) !== lockTime.value) return alert('請填寫有效時間！')
   isSavingLockTime.value = true
   try {
-    await supabase.from('system_settings').upsert({ setting_key: 'attendance_lock_time', setting_value: lockTime.value }, { onConflict: 'setting_key' })
+    const { error } = await supabase.from('system_settings').upsert({ setting_key: 'attendance_lock_time', setting_value: lockTime.value }, { onConflict: 'setting_key' })
+    if (error) throw error
     alert('✅ 鎖定時間已成功更新！前台將會同步套用此設定。')
   } catch (error) {
     alert('❌ 儲存失敗：' + error.message)
@@ -269,21 +271,11 @@ const handleSimStudentClick = async (student) => {
     return
   }
   
-  const simulatedDateTime = new Date(`${simDate.value}T${simTime.value}:00`)
-  const day = simulatedDateTime.getDay()
-  const hours = simulatedDateTime.getHours()
-  const minutes = simulatedDateTime.getMinutes()
-
-  if (day === 0 || day === 6) {
-    alert('🛑 測試情境：被系統封鎖！(週六與週日無法進行點名)')
-    return
-  }
-
-  const [lockH, lockM] = lockTime.value.split(':').map(Number)
-  const isLockedTime = hours > lockH || (hours === lockH && minutes >= lockM)
+  const simulatedDateTime = new Date(`${simDate.value}T${simTime.value}:00+08:00`)
+  const isLockedTime = !isAttendancePasswordFree(simulatedDateTime, lockTime.value)
 
   if (isLockedTime && !isUnlockedSim.value) {
-    const inputPwd = prompt(`🔒 測試情境：已超過設定的 ${lockTime.value}，系統自動彈出密碼框。\n\n若需手動修改點名狀態，請輸入「導師密碼」解鎖：`)
+    const inputPwd = prompt(`🔒 測試情境：目前為週末或已到設定的 ${lockTime.value}，系統自動彈出密碼框。\n\n若需手動修改點名狀態，請輸入「導師密碼」解鎖：`)
     if (inputPwd === null) return 
 
     try {
