@@ -10,15 +10,20 @@
   <!-- 展開時的完整點名板 (加入 relative-wrap) -->
   <div v-show="!isCollapsed" class="attendance-wrapper relative-wrap">
     
-    <!-- 💡 絕對定位的迷你懸浮按鈕：不佔空間，漂浮在右上角間隙 -->
-    <button v-if="!isClassTime" @click="isCollapsed = true" class="btn-collapse-float">
-      收起點名板 ➔
-    </button>
-
-    <div class="attendance-lock-bar">
-      <span role="status">{{ isUnlocked ? '🔓 點名板已解鎖，可連續修改' : '🔒 點名板已鎖定' }}</span>
-      <button v-if="isUnlocked" type="button" @click="$emit('lock-attendance')">鎖上</button>
-      <button v-else type="button" @click="$emit('unlock-attendance')">解鎖</button>
+    <div class="attendance-floating-actions">
+      <button
+        type="button"
+        class="btn-lock-float"
+        :class="{ 'is-unlocked': isUnlocked }"
+        :title="isUnlocked ? '點名板已解鎖，確認完成後鎖上' : '點名板已鎖定，輸入導師密碼解鎖'"
+        :aria-label="isUnlocked ? '鎖上點名板' : '解鎖點名板'"
+        @click="$emit(isUnlocked ? 'lock-attendance' : 'unlock-attendance')"
+      >
+        {{ isUnlocked ? '🔓 鎖上' : '🔒 解鎖' }}
+      </button>
+      <button v-if="!isClassTime" type="button" @click="isCollapsed = true" class="btn-collapse-float">
+        收起點名板 ➔
+      </button>
     </div>
 
     <!-- 📊 頂部統計數據列 -->
@@ -142,9 +147,11 @@ const getStatusClass = (studentId) => {
 </script>
 
 <style scoped>
-.attendance-lock-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; padding: 10px 14px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; color: #334155; }
-.attendance-lock-bar button { flex-shrink: 0; padding: 8px 18px; background: #334155; color: white; border: 0; border-radius: 8px; font: inherit; font-weight: bold; cursor: pointer; }
-.attendance-lock-bar button:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+.attendance-floating-actions { position: absolute; bottom: calc(100% + 4px); right: 0; display: flex; align-items: center; gap: 6px; z-index: 10; }
+.btn-lock-float { padding: 4px 10px; min-height: 30px; border: 1px solid #94a3b8; border-radius: 16px; background: #f8fafc; color: #334155; font: inherit; font-size: 0.85rem; font-weight: bold; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 5px #0f172a14; }
+.btn-lock-float.is-unlocked { background: #f0fdfa; color: #115e59; border-color: #5eead4; }
+.btn-lock-float:hover { filter: brightness(0.95); }
+.attendance-floating-actions button:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
 .attendance-wrapper { background: transparent; width: 100%; transition: all 0.3s ease; }
 
 /* 💡 讓點名板相對定位，以便裡面的迷你按鈕絕對定位 */
@@ -152,11 +159,8 @@ const getStatusClass = (studentId) => {
   position: relative;
 }
 
-/* 💡 迷你懸浮收起按鈕：浮在右上角空隙 */
+/* 收起與鎖定共用右上角懸浮區，避免互相遮擋。 */
 .btn-collapse-float {
-  position: absolute;
-  top: -25px; /* 利用元件上方的空隙，不佔用排版空間 */
-  right: 0;
   background-color: transparent;
   color: #64748b;
   border: 1px dashed #cbd5e1;
