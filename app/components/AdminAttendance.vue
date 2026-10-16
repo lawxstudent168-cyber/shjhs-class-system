@@ -194,6 +194,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { matchesTeacherUnlockPassword } from '../utils/teacherUnlock.js'
 import { normalizeAttendanceLockTime, isAttendancePasswordFree } from '../utils/attendanceAccess.js'
 import { attendanceStatusOrder, parseAttendanceStatus, formatAttendanceStatus, displayAttendanceStatus } from '../utils/attendanceStatus.js'
 const supabase = useSupabaseClient()
@@ -280,20 +281,11 @@ const handleSimStudentClick = async (student) => {
 
     try {
       const { data: pwdData } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'admin_password').maybeSingle()
-      let expectedPwd = '168168168'
-      if (pwdData?.setting_value) {
-        if (pwdData.setting_value.type === 'dynamic') {
-          const cd = new Date()
-          const yy = String(cd.getFullYear()).slice(2)
-          const mm = String(cd.getMonth() + 1).padStart(2, '0')
-          const dd = String(cd.getDate()).padStart(2, '0')
-          expectedPwd = `${yy}${mm}${dd}59`
-        } else {
-          expectedPwd = pwdData.setting_value.custom_pwd
-        }
-      }
+      const expectedPwd = pwdData?.setting_value?.type === 'custom'
+        ? pwdData.setting_value.custom_pwd
+        : undefined
 
-      if (inputPwd !== expectedPwd && inputPwd !== '168168168') {
+      if (!matchesTeacherUnlockPassword(inputPwd, expectedPwd)) {
         alert('❌ 密碼錯誤，無法解鎖！')
         return
       }

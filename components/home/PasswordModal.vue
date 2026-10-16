@@ -14,6 +14,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import { passwordModalRole } from '../../app/utils/teacherUnlock.js'
 
 const props = defineProps({
   show: Boolean,
@@ -29,19 +30,9 @@ const pwdInput = ref('')
 watch(() => props.show, () => { pwdInput.value = '' })
 
 const submit = () => {
-  const pwd = pwdInput.value
-  const teacherPwd = props.officerPasswords.teacher || '168168168'
-
-  if (props.target === 'emergency' || props.target === 'attendance') {
-    if (pwd === teacherPwd) emit('success', { target: props.target, role: '導師' })
-    else alert("❌ 密碼錯誤！")
-  } 
-  else {
-    if (props.officerPasswords.academic && pwd === props.officerPasswords.academic) emit('success', { target: props.target, role: '學藝股長' })
-    else if (props.officerPasswords.counseling && pwd === props.officerPasswords.counseling) emit('success', { target: props.target, role: '輔導股長' })
-    else if (pwd === teacherPwd) emit('success', { target: props.target, role: '導師' })
-    else alert("❌ 密碼錯誤！請確認密碼是否正確。")
-  }
+  const role = passwordModalRole(pwdInput.value, props.target, props.officerPasswords)
+  if (role) emit('success', { target: props.target, role })
+  else alert('❌ 密碼錯誤！請確認密碼是否正確。')
 }
 </script>
 
