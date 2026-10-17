@@ -1,3 +1,4 @@
+import { endVisitorSession } from '../utils/visitorTrackingClient.js'
 import { ref, computed, unref } from 'vue'
 import { normalizeAttendanceLockTime } from '../utils/attendanceAccess.js'
 import { displayedExamSchedule, normalizeExamSchedule, taiwanDateISO } from '../utils/examSchedule.js'
@@ -168,6 +169,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
                 localStorage.setItem('local_logout_timestamp', dbLogoutTime)
                 if (isIpBrownlisted && currentIdentity !== '匿名來訪者') {
                   localStorage.removeItem('visitor_known_identity')
+                  void endVisitorSession('管理員強制登出')
                   sessionStorage.removeItem('schedule_admin_logged_in')
                   sessionStorage.removeItem('exams_admin_logged_in')
                   currentIdentityRef.value = '匿名來訪者'

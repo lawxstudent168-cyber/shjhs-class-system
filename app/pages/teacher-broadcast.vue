@@ -142,6 +142,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, trackVisitorEvent } from '../utils/visitorTrackingClient.js'
 import { ref } from 'vue'
 const supabase = useSupabaseClient()
 
@@ -226,6 +227,7 @@ const verifyPassword = async () => {
   }
 
   if (verifiedRole) {
+    void beginVisitorSession(verifiedRole, '廣播頁密碼驗證')
     currentTeacherRole.value = verifiedRole
     isUnlocked.value = true
     pwdInput.value = ''

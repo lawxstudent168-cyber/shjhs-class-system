@@ -1,3 +1,4 @@
+import { beginVisitorSession } from '../utils/visitorTrackingClient.js'
 import { ref, computed } from 'vue'
 
 export function useIdentityGuard(supabase) {
@@ -40,33 +41,11 @@ export function useIdentityGuard(supabase) {
     }
   }
 
-  const logVisit = async () => {
-    if (sessionStorage.getItem('visit_logged')) return
-    try {
-      const ua = navigator.userAgent
-      let role = localStorage.getItem('visitor_known_identity') || '匿名來訪者'
-      if (sessionStorage.getItem('schedule_admin_logged_in') === 'true' || sessionStorage.getItem('exams_admin_logged_in') === 'true') {
-        role = '導師'
-      }
-      await supabase.from('visitor_logs').insert([{ 
-        ip_address: currentIpStr.value || '未知IP', 
-        device_info: ua, 
-        role: role, 
-        action_details: '👁️ 瀏覽頁面：班級首頁' 
-      }])
-      sessionStorage.setItem('visit_logged', 'true')
-    } catch (e) {}
-  }
-
-  const logRoleVisit = async (roleName) => {
-    try { 
-      await supabase.from('visitor_logs').insert([{ 
-        ip_address: currentIpStr.value || '未知IP', 
-        device_info: navigator.userAgent, 
-        role: roleName, 
-        action_details: `🔑 解鎖後台：${roleName}` 
-      }]) 
-    } catch (e) {}
+  // Page views are recorded by the globally registered plugin, once per navigation.
+  const logVisit = async () => {}
+  const logRoleVisit = (roleName, target = '') => {
+    const labels = { attendance: '點名板', contact: '聯絡簿', classNotes: '注意事項', emergency: '緊急通知' }
+    return beginVisitorSession(roleName, `密碼驗證${target ? '／' + (labels[target] || target) : ''}`)
   }
 
   return {

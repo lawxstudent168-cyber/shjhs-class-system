@@ -222,6 +222,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, endVisitorSession, trackVisitorEvent } from '../utils/visitorTrackingClient.js'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 
 import ExamDashboard from '~~/components/home/ExamDashboard.vue'
@@ -382,6 +383,7 @@ const closePasswordModal = () => {
 }
 
 const lockAttendanceBoard = () => {
+  void endVisitorSession('鎖上點名板')
   lockAttendance()
   finishAttendanceTime()
   if (pwdTarget.value === 'attendance') showPwdModal.value = false
@@ -389,6 +391,8 @@ const lockAttendanceBoard = () => {
 
 const handlePwdSuccess = async ({ target, role }) => {
   showPwdModal.value = false; currentEditorRole.value = role
+  if (target === 'attendance' && role !== 'teacher' && role !== '導師') return alert('❌ 點名板僅限導師解鎖！')
+  void logRoleVisit(role, target)
   if (target === 'emergency') showEmergencyModal.value = true
   else if (target === 'contact') { isEditingContact.value = true; editingContactItems.value = [...contactBookItems.value] } 
   else if (target === 'classNotes') {
@@ -400,18 +404,17 @@ const handlePwdSuccess = async ({ target, role }) => {
     if (role !== 'teacher' && role !== '導師') return alert('❌ 權限不足：點名板狀態變更僅限導師解鎖！')
     await unlockAttendance(role)
   }
-  await logRoleVisit(role)
 }
 
 const handleIdentityVerified = async (finalIdentity) => {
   localStorage.setItem('visitor_known_identity', finalIdentity)
+  void beginVisitorSession(finalIdentity, '首頁身分驗證')
   currentIdentity.value = finalIdentity
   showIdentityModal.value = false
   await fetchData() 
-  await supabase.from('visitor_logs').insert([{ ip_address: currentIpStr.value || '未知IP', device_info: navigator.userAgent, role: finalIdentity, action_details: `🔑 綁定設備身分：${finalIdentity}` }])
 }
 
-const logAudit = async (actionType, details) => { try { await supabase.from('assignment_audit_logs').insert({ subject_name: '首頁黑板', action_type: actionType, operator_role: currentEditorRole.value || '導師', details: details }) } catch (e) {} }
+const logAudit = async (actionType, details) => { void trackVisitorEvent({ kind: 'operation', label: actionType, details, outcome: '功能回報' }); try { await supabase.from('assignment_audit_logs').insert({ subject_name: '首頁黑板', action_type: actionType, operator_role: currentEditorRole.value || '導師', details: details }) } catch (e) {} }
 
 const saveContactItems = async () => {
   try {

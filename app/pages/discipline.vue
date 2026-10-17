@@ -263,6 +263,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, endVisitorSession, resumeVisitorSession } from '../utils/visitorTrackingClient.js'
 import { ref, computed, onMounted } from 'vue'
 const supabase = useSupabaseClient()
 
@@ -275,19 +276,7 @@ const getToday = () => {
 }
 
 // 💡 登入成功寫入日誌的共用函式
-const logRoleVisit = async (roleName) => {
-  try {
-    const ipRes = await fetch('https://api.ipify.org?format=json')
-    const { ip } = await ipRes.json()
-    await supabase.from('visitor_logs').insert([{ 
-      ip_address: ip, 
-      device_info: navigator.userAgent, 
-      role: roleName 
-    }])
-  } catch (e) { 
-    console.error("日誌寫入失敗", e) 
-  }
-}
+const logRoleVisit = roleName => beginVisitorSession(roleName, '密碼驗證')
 
 // 登入狀態與清單
 const isLoggedIn = ref(false)
@@ -323,6 +312,7 @@ onMounted(async () => {
   if (role) {
     userRole.value = role
     isLoggedIn.value = true
+    void resumeVisitorSession(userRole.value)
     await loadMainData()
   }
 })
@@ -394,6 +384,7 @@ const completeLogin = async (roleName) => {
 }
 
 const logout = () => {
+  void endVisitorSession('登出')
   sessionStorage.removeItem('discipline_role')
   isLoggedIn.value = false
 }

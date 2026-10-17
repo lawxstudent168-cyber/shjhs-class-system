@@ -236,6 +236,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, endVisitorSession, trackVisitorEvent } from '../utils/visitorTrackingClient.js'
 import { ref, onMounted, computed } from 'vue'
 const supabase = useSupabaseClient()
 
@@ -260,15 +261,10 @@ const hwEmailContentTemplate = ref(`親愛的家長您好：\n\n為您彙整 【
 
 const printMode = ref('all')
 
-const logRoleVisit = async (roleName) => {
-  try {
-    const ipRes = await fetch('https://api.ipify.org?format=json')
-    const { ip } = await ipRes.json()
-    await supabase.from('visitor_logs').insert([{ ip_address: ip, device_info: navigator.userAgent, role: roleName }])
-  } catch (e) { console.error(e) }
-}
+const logRoleVisit = roleName => beginVisitorSession(roleName, '密碼驗證')
 
 const logAction = async (actionType, details) => {
+  if (actionType !== '系統登入') void trackVisitorEvent({ kind: 'operation', label: actionType, details, outcome: '功能回報' })
   await supabase.from('assignment_audit_logs').insert({
     subject_name: selectedSubject.value, action_type: actionType, operator_role: activeRole.value, details: details
   })
@@ -299,7 +295,7 @@ const verifyPassword = async () => {
         isUnlocked.value = true; 
         await fetchDashboardData(); 
         logAction('系統登入', '導師登入成功')
-        await logRoleVisit('導師')
+        void logRoleVisit('導師')
         return
       }
     } catch (e) {
@@ -308,7 +304,7 @@ const verifyPassword = async () => {
         isUnlocked.value = true; 
         await fetchDashboardData(); 
         logAction('系統登入', '導師登入成功')
-        await logRoleVisit('導師(降級登入)')
+        void logRoleVisit('導師(降級登入)')
         return
       }
     }
@@ -320,17 +316,18 @@ const verifyPassword = async () => {
   if (teacherInfo && passwordInput.value === teacherInfo.password) {
     activeRole.value = '科任老師'
     isUnlocked.value = true; await fetchDashboardData(); loadRoutineAssignments();
-    logAction('系統登入', `${teacherInfo.subject_name} 科任老師登入成功`); await logRoleVisit(`${teacherInfo.subject_name} 科任老師`)
+    logAction('系統登入', `${teacherInfo.subject_name} 科任老師登入成功`); void logRoleVisit(`${teacherInfo.subject_name} 科任老師`)
   } else if (teacherInfo && teacherInfo.assistant_password && passwordInput.value === teacherInfo.assistant_password) {
     activeRole.value = '小老師'
     isUnlocked.value = true; await fetchDashboardData(); loadRoutineAssignments();
-    logAction('系統登入', `${teacherInfo.subject_name} 小老師登入成功`); await logRoleVisit(`${teacherInfo.subject_name} 小老師`)
+    logAction('系統登入', `${teacherInfo.subject_name} 小老師登入成功`); void logRoleVisit(`${teacherInfo.subject_name} 小老師`)
   } else {
     alert('❌ 密碼錯誤！'); passwordInput.value = ''
   }
 }
 
 const logout = () => {
+  void endVisitorSession('登出')
   isUnlocked.value = false;
   activeRole.value = '';
   passwordInput.value = '';

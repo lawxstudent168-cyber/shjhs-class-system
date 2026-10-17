@@ -1,348 +1,147 @@
 <template>
-  <div class="tracking-container">
-    <div class="table-header">
-      <h3>🕵️ 實名身分與足跡追蹤中心</h3>
-      <button @click="fetchLogs" class="refresh-btn" :disabled="isLoading">
-        {{ isLoading ? '🔄 載入中...' : '🔄 重新整理' }}
-      </button>
+  <section class="tracking-center" data-no-tracking>
+    <header class="tracking-header">
+      <div><h3>家長與實名足跡追蹤中心</h3><p>整合登入身分、操作足跡、訪客設備與全網站紀錄。</p></div>
+      <div class="buttons"><button :disabled="loading" @click="loadLogs(true)">重新整理</button><button :disabled="!filtered.length" @click="exportCsv">匯出目前篩選 CSV</button></div>
+    </header>
+    <div class="filters">
+      <label>開始日期<input v-model="fromDate" type="date" /></label>
+      <label>結束日期<input v-model="toDate" type="date" /></label>
+      <button :disabled="loading" @click="loadLogs(true)">查詢日期</button>
+      <label class="search">搜尋<input v-model="search" placeholder="姓名、座號、角色、IP、操作、頁面或登入階段" /></label>
+      <label>操作類別<select v-model="kind"><option value="">全部類別</option><option v-for="(label, value) in visitorEventKinds" :key="value" :value="value">{{ label }}</option></select></label>
     </div>
-    
-    <p class="help-text">
-      此系統會自動過濾匿名訪客，專注追蹤「已通過身分驗證」的家長、學生與老師。<br>
-      💡 若同一位家長使用多台設備（例如手機與家中電腦）登入，系統會自動歸戶合併其足跡。
-    </p>
-
-    <div class="main-layout">
-      <!-- 左側：已驗證身分清單 -->
-      <div class="identity-list-panel">
-        <div class="panel-header">👥 已驗證身分 (依最新活動排序)</div>
-        
-        <div class="search-bar">
-          <input type="text" v-model="searchQuery" placeholder="🔍 搜尋姓名、座號或身分..." class="search-input" />
-        </div>
-
-        <div v-if="isLoading" class="loading-state">載入足跡中...</div>
-        <div v-else-if="filteredIdentities.length === 0" class="empty-state">目前無符合條件的實名紀錄</div>
-        
-        <div v-else class="list-wrapper">
-          <div v-for="user in filteredIdentities" :key="user.role" 
-               class="identity-card" 
-               :class="{ active: selectedIdentity?.role === user.role }"
-               @click="selectedIdentity = user">
-            
-            <div class="v-header">
-              <!-- 依據身分給予不同的視覺標籤 -->
-              <span class="role-badge" :class="getRoleBadgeClass(user.role)">
-                {{ getRoleIcon(user.role) }} {{ extractRoleType(user.role) }}
-              </span>
-              <span class="v-time">{{ formatTime(user.latestTime, true) }}</span>
-            </div>
-            
-            <div class="v-name">{{ extractName(user.role) }}</div>
-            
-            <div class="v-footer">
-              <span class="v-devices">📱 {{ user.devices.size }} 台設備</span>
-              <span class="v-count">共 {{ user.logs.length }} 筆動作</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 右側：詳細設備與時間軸 -->
-      <div class="timeline-panel">
-        <div v-if="!selectedIdentity" class="empty-prompt">
-          👈 請從左側選擇一位實名用戶以查看其詳細足跡
-        </div>
-        
-        <div v-else class="timeline-wrapper">
-          <div class="timeline-header">
-            <h4 class="detail-title">{{ selectedIdentity.role }} 的活動分析</h4>
-            
-            <!-- 綁定的設備與 IP 清單 -->
-            <div class="device-box">
-              <div class="device-box-title">📍 該身分曾經使用過的設備與 IP：</div>
-              <ul class="device-list">
-                <li v-for="(dev, idx) in Array.from(selectedIdentity.devices)" :key="idx">
-                  <strong>{{ dev.split('|')[0] }}</strong> - {{ parseUserAgent(dev.split('|')[1]) }}
-                </li>
-              </ul>
-            </div>
-          </div>
-          
-          <div class="timeline-content">
-            <div v-for="(log, idx) in selectedIdentity.logs" :key="log.id || idx" class="timeline-item">
-              <div class="time-col">
-                <div class="t-date">{{ formatDateOnly(log.created_at) }}</div>
-                <div class="t-time">{{ formatTimeOnly(log.created_at) }}</div>
-              </div>
-              
-              <div class="dot-col">
-                <div class="dot"></div>
-                <div class="line" v-if="idx !== selectedIdentity.logs.length - 1"></div>
-              </div>
-              
-              <div class="action-col">
-                <div class="action-header">
-                  <span class="action-tag" :class="getActionClass(log.action_details)">
-                    {{ getActionCategory(log.action_details) }}
-                  </span>
-                  <span class="action-text">{{ log.action_details || '造訪網站' }}</span>
-                </div>
-                <div class="action-meta">
-                  由 IP: {{ log.ip_address }} 操作
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+    <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
+    <div class="summary">
+      <span>目前載入 <strong>{{ logs.length }}</strong> / {{ total }} 筆</span>
+      <span>實名身分 <strong>{{ identities.length }}</strong> 組</span>
+      <span>已記錄登入／驗證 <strong>{{ loginCount }}</strong> 次</span>
+      <span>篩選結果 <strong>{{ filtered.length }}</strong> 筆</span>
+    </div>
+    <nav class="view-tabs" aria-label="足跡檢視方式">
+      <button v-for="tab in tabs" :key="tab.id" :class="{ active: mode === tab.id }" @click="mode = tab.id; selectedKey = ''">{{ tab.label }}</button>
+    </nav>
+    <p class="note">統計與文字篩選以目前載入資料為準，可按下方「載入更多」。時間皆為台灣時間。具名身分依登入時提供的名稱歸戶；「導師」等共用角色不能辨識是哪一位個人。點擊紀錄只表示按下按鈕，實際完成的操作另標示結果。</p>
+    <p class="note">舊紀錄保留原始內容；沒有身分或登入階段的紀錄不會根據 IP 自動歸戶。瀏覽器記憶身分與本次重新驗證會分開標示。</p>
+    <div v-if="loading && !logs.length" class="empty" role="status">載入中…</div>
+    <div v-else-if="mode === 'all'" class="all-records">
+      <p v-if="!filtered.length" class="empty">沒有符合條件的紀錄。</p>
+      <div v-else class="table-wrap"><table>
+        <thead><tr><th>時間</th><th>登入身分／來源</th><th>操作及結果</th><th>頁面／登入階段</th><th>IP／設備</th><th>管理</th></tr></thead>
+        <tbody><tr v-for="log in filtered" :key="log.id">
+          <td>{{ formatTime(log.created_at) }}</td>
+          <td><strong>{{ log.identity }}</strong><small>{{ log.source }}</small></td>
+          <td><span class="badge">{{ visitorEventKinds[log.kind] || log.kind }}</span> {{ log.label }}<small>{{ log.outcome }} {{ log.details }}</small></td>
+          <td>{{ log.path || '未記錄頁面' }}<small>{{ log.sessionId || '舊紀錄無登入階段' }}</small></td>
+          <td>{{ log.ip_address || '未知 IP' }}<small>{{ log.device_info || '未知設備' }}</small></td>
+          <td><button :disabled="blocking || !validIP(log.ip_address)" @click="toggleBlock(log.ip_address)">{{ blockedIPs.includes(log.ip_address) ? '解除封鎖' : '封鎖 IP' }}</button></td>
+        </tr></tbody>
+      </table></div>
+    </div>
+    <div v-else class="tracking-layout">
+      <aside aria-label="身分或工作階段清單">
+        <p v-if="!groups.length" class="empty">沒有符合條件的紀錄。</p>
+        <button v-for="group in groups" :key="group.key" class="group-card" :class="{ selected: selected?.key === group.key }" @click="selectedKey = group.key">
+          <strong>{{ groupTitle(group) }}</strong>
+          <small>{{ formatTime(group.latestTime) }}</small>
+          <span>{{ group.logs.length }} 筆動作 · {{ group.loginCount }} 次登入／驗證 · {{ group.devices.size }} 組瀏覽器設備</span>
+        </button>
+      </aside>
+      <div class="timeline">
+        <template v-if="selected">
+          <h4>{{ groupTitle(selected) }}</h4>
+          <p v-if="mode === 'session'" class="note">{{ selected.logs[0].sessionId ? '登入階段識別：' + selected.logs[0].sessionId : '這是缺少登入階段識別的舊紀錄，不能推定一次登入。' }}</p>
+          <article v-for="log in selected.logs" :key="log.id" class="event">
+            <time>{{ formatTime(log.created_at) }}</time>
+            <div><span class="badge">{{ visitorEventKinds[log.kind] || log.kind }}</span> <strong>{{ log.label }}</strong></div>
+            <p>身分：<strong>{{ log.identity }}</strong> · {{ log.source }}</p>
+            <p v-if="log.outcome || log.details">{{ log.outcome }} <span>{{ log.details }}</span></p>
+            <small>頁面：{{ log.path || '未記錄' }} · IP：{{ log.ip_address || '未知' }}</small>
+            <small>登入階段：{{ log.sessionId || '舊紀錄未提供' }}</small>
+            <small>設備：{{ log.device_info || '未知' }}</small>
+          </article>
+        </template>
+        <p v-else class="empty">請選擇要查看的身分、登入階段或設備。</p>
       </div>
     </div>
-  </div>
+    <footer><button v-if="logs.length < total" :disabled="loading" @click="loadLogs(false)">{{ loading ? '載入中…' : '載入更多' }}</button><span v-else>目前查詢日期範圍已全部載入</span></footer>
+  </section>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { filterVisitorLogs, groupVisitorLogs, normalizeVisitorLog, visitorEventKinds, visitorLogsCsv } from '../utils/visitorTracking.js'
+import { trackVisitorEvent } from '../utils/visitorTrackingClient.js'
+const props = defineProps({ initialMode: { type: String, default: 'identity' } })
 const supabase = useSupabaseClient()
+const logs = ref([]), total = ref(0), loading = ref(false), errorMessage = ref('')
+const fromDate = ref(''), toDate = ref(''), search = ref(''), kind = ref(''), mode = ref(props.initialMode), selectedKey = ref('')
+const blockedIPs = ref([]), blocking = ref(false)
+const tabs = [{ id: 'identity', label: '家長與實名身分' }, { id: 'session', label: '每次登入／工作階段' }, { id: 'device', label: '訪客設備足跡' }, { id: 'all', label: '全網站紀錄' }]
+const filtered = computed(() => filterVisitorLogs(logs.value, { search: search.value, kind: kind.value }))
+const identities = computed(() => groupVisitorLogs(logs.value, 'identity'))
+const loginCount = computed(() => logs.value.filter(log => log.kind === 'login').length)
+const groups = computed(() => groupVisitorLogs(filtered.value, mode.value))
+const selected = computed(() => groups.value.find(group => group.key === selectedKey.value) || groups.value[0])
+const formatTime = value => value ? new Date(value).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false }) : '未記錄時間'
+const groupTitle = group => mode.value === 'identity' ? group.key
+  : mode.value === 'session' ? `${group.logs[0].identity} · ${group.logs.some(log => log.kind === 'login') ? '登入／驗證階段' : '延續階段／舊紀錄'}`
+  : `${group.logs[0].deviceId ? '瀏覽器設備 ' + group.logs[0].deviceId.slice(0, 8) : '舊紀錄設備推估'} · ${[...group.identities].join('、')}`
 
-const rawLogs = ref([])
-const isLoading = ref(false)
-const selectedIdentity = ref(null)
-const searchQuery = ref('')
-
-const fetchLogs = async () => {
-  isLoading.value = true
-  selectedIdentity.value = null
-  
-  const { data } = await supabase.from('visitor_logs')
-    .select('*')
-    .neq('role', '匿名來訪者')
-    .not('role', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(3000)
-    
-  rawLogs.value = data || []
-  isLoading.value = false
+let activeDates = { from: '', to: '' }
+const loadLogs = async reset => {
+  if (loading.value) return
+  if (reset && fromDate.value && toDate.value && fromDate.value > toDate.value) { errorMessage.value = '開始日期不能晚於結束日期。'; return }
+  loading.value = true; errorMessage.value = ''
+  const dates = reset ? { from: fromDate.value, to: toDate.value } : activeDates
+  try {
+    let query = supabase.from('visitor_logs').select('*', { count: 'exact' }).order('created_at', { ascending: false }).order('id', { ascending: false })
+    if (dates.from) query = query.gte('created_at', `${dates.from}T00:00:00+08:00`)
+    if (dates.to) query = query.lte('created_at', `${dates.to}T23:59:59.999999+08:00`)
+    const offset = reset ? 0 : logs.value.length
+    const { data, error, count } = await query.range(offset, offset + 499)
+    if (error) throw error
+    const normalized = (data || []).map(normalizeVisitorLog)
+    if (reset) { logs.value = normalized; activeDates = dates }
+    else { const seen = new Set(logs.value.map(log => log.id)); logs.value.push(...normalized.filter(log => !seen.has(log.id))) }
+    total.value = count ?? logs.value.length
+    const blocked = await supabase.from('ip_rules').select('ip_range').eq('rule_type', '黑名單')
+    if (blocked.error) throw blocked.error
+    blockedIPs.value = (blocked.data || []).map(row => row.ip_range)
+  } catch { errorMessage.value = '讀取失敗，請檢查網路或資料表讀取權限後重試；目前資料可能尚未完整載入。' }
+  finally { loading.value = false }
 }
-
-onMounted(() => fetchLogs())
-
-const groupedIdentities = computed(() => {
-  const map = {}
-  
-  rawLogs.value.forEach(log => {
-    if (!log.role || log.role.trim() === '') return
-    
-    if (!map[log.role]) {
-      map[log.role] = {
-        role: log.role,
-        latestTime: log.created_at,
-        devices: new Set(), 
-        logs: []
-      }
-    }
-    
-    map[log.role].logs.push(log)
-    map[log.role].devices.add(`${log.ip_address || '未知IP'}|${log.device_info || '未知設備'}`)
-    
-    if (new Date(log.created_at) > new Date(map[log.role].latestTime)) {
-      map[log.role].latestTime = log.created_at
-    }
-  })
-
-  return Object.values(map).sort((a, b) => new Date(b.latestTime) - new Date(a.latestTime))
-})
-
-const filteredIdentities = computed(() => {
-  if (!searchQuery.value) return groupedIdentities.value
-  const q = searchQuery.value.toLowerCase()
-  return groupedIdentities.value.filter(u => u.role.toLowerCase().includes(q))
-})
-
-const extractName = (roleStr) => {
-  if (roleStr.includes('家長')) return roleStr.split('家長')[0].trim()
-  if (roleStr.includes('學生')) return roleStr.split('學生')[0].trim()
-  return roleStr
+const validIP = ip => typeof ip === 'string' && (/^(\d{1,3}\.){3}\d{1,3}$/.test(ip) || /^[a-f\d:]+$/i.test(ip) && ip.includes(':'))
+const toggleBlock = async ip => {
+  const block = !blockedIPs.value.includes(ip)
+  if (!validIP(ip) || !confirm(`確定${block ? '封鎖' : '解除封鎖'} IP ${ip}？此 IP 可能由多位使用者共用。`)) return
+  blocking.value = true
+  try {
+    const result = block
+      ? await supabase.from('ip_rules').insert({ ip_range: ip, rule_type: '黑名單', description: '從統一足跡追蹤中心設定' })
+      : await supabase.from('ip_rules').delete().eq('ip_range', ip).eq('rule_type', '黑名單')
+    if (result.error) throw result.error
+    blockedIPs.value = block ? [...blockedIPs.value, ip] : blockedIPs.value.filter(value => value !== ip)
+    void trackVisitorEvent({ kind: 'operation', label: block ? '封鎖 IP' : '解除封鎖 IP', details: ip, outcome: '成功' })
+  } catch { errorMessage.value = '封鎖設定儲存失敗，請重試。' }
+  finally { blocking.value = false }
 }
-
-const extractRoleType = (roleStr) => {
-  if (roleStr.includes('家長')) return '家長'
-  if (roleStr.includes('學生')) return '學生'
-  if (roleStr.includes('導師')) return '導師'
-  if (roleStr.includes('任課老師')) return '科任'
-  return '幹部'
+const exportCsv = () => {
+  const url = URL.createObjectURL(new Blob([visitorLogsCsv(filtered.value)], { type: 'text/csv;charset=utf-8;' }))
+  const link = document.createElement('a'); link.href = url; link.download = 'visitor-tracking.csv'; link.click(); URL.revokeObjectURL(url)
 }
-
-const getRoleIcon = (roleStr) => {
-  if (roleStr.includes('家長')) return '👨‍👩‍👦'
-  if (roleStr.includes('學生')) return '🎒'
-  if (roleStr.includes('老師') || roleStr.includes('導師')) return '👨‍🏫'
-  return '🛡️'
-}
-
-const getRoleBadgeClass = (roleStr) => {
-  if (roleStr.includes('家長')) return 'badge-parent'
-  if (roleStr.includes('學生')) return 'badge-student'
-  if (roleStr.includes('老師') || roleStr.includes('導師')) return 'badge-teacher'
-  return 'badge-admin'
-}
-
-const parseUserAgent = (ua) => {
-  if (!ua || ua === '未知設備') return '未知設備'
-  let os = '未知系統'; let browser = '未知瀏覽器'
-  
-  if (ua.includes('Win')) os = 'Windows'
-  else if (ua.includes('Mac')) os = 'Mac / iOS'
-  else if (ua.includes('Android')) os = 'Android'
-  else if (ua.includes('Linux')) os = 'Linux'
-
-  if (ua.includes('Chrome')) browser = 'Chrome'
-  else if (ua.includes('Safari')) browser = 'Safari'
-  else if (ua.includes('Firefox')) browser = 'Firefox'
-  else if (ua.includes('Edge')) browser = 'Edge'
-
-  const isMobile = ua.includes('Mobile') ? '📱手機' : '💻電腦'
-  return `${isMobile} (${os} - ${browser})`
-}
-
-const formatTime = (iso, short = false) => {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return short 
-    ? `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
-    : d.toLocaleString('zh-TW', { hour12: false })
-}
-const formatDateOnly = (iso) => iso ? new Date(iso).toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' }) : ''
-const formatTimeOnly = (iso) => iso ? new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : ''
-
-const getActionCategory = (action) => {
-  if (!action) return '📌 動作'
-  if (action.includes('點擊') || action.includes('按鈕')) return '🖱️ 點擊'
-  if (action.includes('瀏覽') || action.includes('進入')) return '👁️ 瀏覽'
-  if (action.includes('登入') || action.includes('綁定') || action.includes('解鎖')) return '🔑 驗證'
-  return '📌 動作'
-}
-
-const getActionClass = (action) => {
-  if (!action) return 'tag-default'
-  if (action.includes('點擊') || action.includes('按鈕')) return 'tag-click'
-  if (action.includes('瀏覽') || action.includes('進入')) return 'tag-view'
-  if (action.includes('登入') || action.includes('綁定') || action.includes('解鎖')) return 'tag-auth'
-  return 'tag-default'
-}
+onMounted(() => loadLogs(true))
 </script>
 
 <style scoped>
-.tracking-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); font-family: sans-serif;}
-.table-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 10px; }
-.table-header h3 { margin: 0; color: #334155; font-size: 1.4rem;}
-.refresh-btn { background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;}
-.refresh-btn:hover:not(:disabled) { background: #e2e8f0; }
-.help-text { color: #64748b; font-size: 0.95rem; margin-bottom: 20px; line-height: 1.5; }
-
-.main-layout { display: flex; gap: 20px; align-items: flex-start; height: 750px;}
-
-/* 左側身分清單 */
-.identity-list-panel { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; height: 100%; overflow: hidden;}
-.panel-header { padding: 15px; background: #e2e8f0; font-weight: bold; color: #1e293b; text-align: center; font-size: 1.05rem;}
-.search-bar { padding: 10px 15px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
-.search-input { width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; box-sizing: border-box; }
-.search-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
-
-.list-wrapper { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-.identity-card { background: white; padding: 15px; border-radius: 8px; border: 2px solid transparent; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer; transition: 0.2s; }
-.identity-card:hover { border-color: #cbd5e1; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-.identity-card.active { border-color: #8b5cf6; background: #faf5ff; }
-
-.v-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.role-badge { padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; }
-.badge-parent { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-.badge-student { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-.badge-teacher { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-.badge-admin { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-
-.v-time { font-size: 0.85rem; color: #64748b; }
-.v-name { font-size: 1.1rem; font-weight: bold; color: #1e293b; margin-bottom: 10px; line-height: 1.4;}
-.v-footer { display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569; border-top: 1px dashed #e2e8f0; padding-top: 8px;}
-.v-devices { color: #8b5cf6; font-weight: bold; }
-
-/* 右側時間軸 */
-.timeline-panel { flex: 1; min-width: 0; background: white; border: 1px solid #e2e8f0; border-radius: 8px; height: 100%; display: flex; flex-direction: column; }
-.empty-prompt { display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8; font-size: 1.1rem; font-style: italic; background: #f8fafc; border-radius: 8px; padding: 20px; text-align: center;}
-
-.timeline-wrapper { display: flex; flex-direction: column; height: 100%; }
-.timeline-header { padding: 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; border-radius: 8px 8px 0 0; }
-.detail-title { margin: 0 0 15px 0; color: #1e293b; font-size: 1.3rem; }
-
-.device-box { background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 15px; }
-.device-box-title { font-weight: bold; color: #475569; font-size: 0.95rem; margin-bottom: 8px;}
-.device-list { margin: 0; padding-left: 20px; font-size: 0.9rem; color: #334155; }
-.device-list li { margin-bottom: 4px; word-break: break-all; }
-
-.timeline-content { flex: 1; overflow-y: auto; padding: 20px 30px; }
-.timeline-item { display: flex; gap: 20px; }
-.time-col { width: 90px; text-align: right; flex-shrink: 0; padding-top: 2px; }
-.t-date { font-size: 0.85rem; color: #64748b; }
-.t-time { font-size: 1.05rem; font-weight: bold; color: #1e293b; font-family: monospace;}
-
-.dot-col { display: flex; flex-direction: column; align-items: center; width: 20px; flex-shrink: 0; }
-.dot { width: 12px; height: 12px; border-radius: 50%; background: #8b5cf6; border: 3px solid #ddd6fe; margin-top: 5px; z-index: 2;}
-.line { flex: 1; width: 2px; background: #e2e8f0; min-height: 45px; margin-top: 5px; margin-bottom: 5px;}
-
-.action-col { flex: 1; padding-bottom: 30px; }
-.action-header { margin-bottom: 6px; display: flex; align-items: flex-start; gap: 10px;}
-.action-tag { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; flex-shrink: 0; margin-top: 2px;}
-.action-text { font-size: 1.1rem; color: #334155; line-height: 1.5; font-weight: bold;}
-.action-meta { font-size: 0.85rem; color: #94a3b8; margin-top: 4px;}
-
-.tag-view { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-.tag-click { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-.tag-auth { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
-.tag-default { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-
-.loading-state, .empty-state { text-align: center; padding: 50px 20px; color: #64748b; font-style: italic; }
-
-/* 💡 RWD：手機與小平板版面優化 */
-@media (max-width: 768px) {
-  .table-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 15px;
-  }
-  .refresh-btn {
-    width: 100%; /* 按鈕滿版，方便觸控 */
-  }
-  
-  .main-layout {
-    flex-direction: column; /* 從左右排列變成上下堆疊 */
-    height: auto; /* 解除高度限制 */
-  }
-
-  .identity-list-panel {
-    width: 100%; /* 名單寬度滿版 */
-    height: 350px; /* 限制名單高度，才不會把足跡擠到最底層 */
-    flex-shrink: 1;
-  }
-
-  .timeline-panel {
-    width: 100%;
-    height: 600px; /* 給時間軸一個固定高度讓它可以獨立捲動 */
-  }
-
-  .timeline-content {
-    padding: 20px 15px; /* 縮小左右 padding 節省空間 */
-  }
-
-  .timeline-item {
-    gap: 12px; /* 縮小時間和點點的距離 */
-  }
-
-  .time-col {
-    width: 75px; /* 稍微縮小時間欄位寬度 */
-  }
-
-  .action-header {
-    flex-direction: column; /* 標籤跟文字上下排列 */
-    gap: 6px;
-  }
-}
+.tracking-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+h3 { margin: 0; color: #1e293b; } p { margin: 8px 0; } .tracking-header p, .note { color: #64748b; font-size: .9rem; line-height: 1.6; }
+button, input, select { font: inherit; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 7px; background: white; color: #334155; }
+button { cursor: pointer; } button:disabled { opacity: .5; cursor: default; } .buttons, .filters, .summary, .view-tabs { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; align-items: end; }
+.filters label { display: flex; flex-direction: column; gap: 5px; font-size: .9rem; } .search { flex: 1; min-width: 200px; } .summary span { background: #f1f5f9; padding: 10px; border-radius: 8px; }
+.view-tabs .active, .group-card.selected { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }.error { background: #fef2f2; color: #b91c1c; padding: 12px; }
+.tracking-layout { display: grid; grid-template-columns: minmax(240px, 32%) minmax(0, 1fr); gap: 18px; } aside, .timeline { max-height: 720px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
+.group-card { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }.group-card span { font-size: .85rem; }.event { padding: 14px 0; border-bottom: 1px solid #e2e8f0; }.event time { display: block; color: #64748b; margin-bottom: 8px; } small { display: block; color: #64748b; margin-top: 6px; overflow-wrap: anywhere; }.badge { background: #e0f2fe; color: #0369a1; padding: 3px 7px; border-radius: 5px; font-size: .85rem; }
+.empty { padding: 30px 10px; text-align: center; color: #64748b; }.table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; min-width: 920px; } th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; vertical-align: top; }td { max-width: 260px; overflow-wrap: anywhere; } footer { display: flex; justify-content: center; padding: 20px; }
+@media(max-width: 760px) { .tracking-layout { grid-template-columns: 1fr; } aside { max-height: 300px; } .filters label { flex: 1; } }
 </style>

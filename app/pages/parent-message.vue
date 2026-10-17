@@ -98,6 +98,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, endVisitorSession, trackVisitorEvent } from '../utils/visitorTrackingClient.js'
 import { ref, onMounted, nextTick } from 'vue'
 const supabase = useSupabaseClient()
 
@@ -243,6 +244,7 @@ const verifyIdentity = async () => {
 
     verifiedStudentName.value = stData.real_name
     isVerified.value = true
+    void beginVisitorSession(`${stData.real_name} 家長`, '家長私訊身分驗證')
     await loadChatHistory()
 
   } catch (error) { 
@@ -302,7 +304,7 @@ const sendMessage = async () => {
     // 💡 先把訊息內容存進變數，稍後寄信會用到
     const contentToSend = newMessage.value
     
-    await supabase.from('private_messages').insert({ 
+    const { error: sendError } = await supabase.from('private_messages').insert({
       student_id: selectedStudentId.value, 
       sender_role: '家長', 
       chat_type: '家長', 
@@ -310,6 +312,8 @@ const sendMessage = async () => {
       is_read_by_teacher: false 
     })
     
+    if (sendError) throw sendError
+    void trackVisitorEvent({ kind: 'operation', label: '傳送家長私訊', outcome: '成功' })
     newMessage.value = ''
     await loadChatHistory()
     
@@ -326,6 +330,7 @@ const sendMessage = async () => {
 const logout = async () => {
   try { await $fetch('/api/private-media/session', { method: 'POST', body: { action: 'logout' }, retry: 0 }) }
   catch { alert('附件登出尚未完成，請恢復連線後重試。'); return }
+  void endVisitorSession('私訊登出')
   isVerified.value = false
   studentBirthday.value = ''
   studentIdLast4.value = ''

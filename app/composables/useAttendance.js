@@ -1,3 +1,4 @@
+import { trackVisitorEvent } from '../utils/visitorTrackingClient.js'
 // app/composables/useAttendance.js
 import { ref, computed, onScopeDispose } from 'vue'
 import { nextAttendanceStatus, formatAttendanceStatus } from '../utils/attendanceStatus.js'
@@ -72,10 +73,12 @@ export function useAttendance(todayISO) {
         ? await supabase.from('attendances').update({ status: nextStatus }).eq('id', existing.id)
         : await supabase.from('attendances').insert({ student_id: student.id, record_date: todayISO, status: nextStatus })
       if (error) throw error
+      void trackVisitorEvent({ kind: 'operation', label: '修改點名狀態', details: `${student.seat_number || ''}號 ${student.real_name || student.hidden_name || ''}：${currentStatusFull} → ${nextStatus}`, outcome: '成功' })
       const record = todayAttendances.value.find(a => a.student_id === student.id)
       if (record) record.status = nextStatus
       else todayAttendances.value.push({ student_id: student.id, record_date: todayISO, status: nextStatus })
     } catch (error) {
+      void trackVisitorEvent({ kind: 'operation', label: '修改點名狀態', outcome: '失敗' })
       alert('❌ 點名儲存失敗：' + error.message)
     }
   }

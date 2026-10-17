@@ -219,6 +219,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, endVisitorSession, resumeVisitorSession } from '../utils/visitorTrackingClient.js'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import ExamDashboard from '~~/components/home/ExamDashboard.vue'
 import { examFontSettings, examFontStyles, examLeftTextSettings, examLeftTextStyles, normalizeExamSchedule, hasValidExamDates, displayedExamSchedule, taiwanDateISO, isValidExamDate, examStatusAt, examRemainingSeconds } from '../utils/examSchedule.js'
@@ -310,6 +311,7 @@ const previewCountdownText = computed(() => {
 onMounted(async () => {
   previewTimer = setInterval(() => { previewNow.value = Date.now() }, 1000)
   if (sessionStorage.getItem('exams_admin_logged_in') === 'true') {
+    void resumeVisitorSession('導師')
     isLoggedIn.value = true
     await fetchExamData()
   }
@@ -332,16 +334,16 @@ const handleLogin = async () => {
     }
     if (passwordInput.value === expectedPwd || passwordInput.value === '168168168') {
       isLoggedIn.value = true
-      sessionStorage.setItem('exams_admin_logged_in', 'true')
+      sessionStorage.setItem('exams_admin_logged_in', 'true'); void beginVisitorSession('導師', '導師密碼驗證')
       await fetchExamData()
     } else alert('❌ 密碼錯誤！')
   } catch (e) {
-    if (passwordInput.value === '168168168') { isLoggedIn.value = true; sessionStorage.setItem('exams_admin_logged_in', 'true'); await fetchExamData() }
+    if (passwordInput.value === '168168168') { isLoggedIn.value = true; sessionStorage.setItem('exams_admin_logged_in', 'true'); void beginVisitorSession('導師', '導師密碼驗證'); await fetchExamData() }
     else alert('驗證發生錯誤。')
   } finally { isLoggingIn.value = false; passwordInput.value = '' }
 }
 
-const logout = () => { sessionStorage.removeItem('exams_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
+const logout = () => { void endVisitorSession('導師登出'); sessionStorage.removeItem('exams_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
 
 const fetchExamData = async () => {
   const [{ data }, { data: students }, { data: attendances }, { data: seating }] = await Promise.all([

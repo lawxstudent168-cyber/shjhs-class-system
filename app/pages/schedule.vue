@@ -192,6 +192,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, endVisitorSession, resumeVisitorSession } from '../utils/visitorTrackingClient.js'
 import { ref, computed, onMounted } from 'vue'
 const supabase = useSupabaseClient()
 
@@ -283,6 +284,7 @@ const previewDisplay = computed(() => {
 
 onMounted(async () => {
   if (sessionStorage.getItem('schedule_admin_logged_in') === 'true') {
+    void resumeVisitorSession('導師')
     isLoggedIn.value = true
     await fetchSchedule()
   }
@@ -305,13 +307,9 @@ const handleLogin = async () => {
     
     if (passwordInput.value === expectedPwd || passwordInput.value === '168168168') {
       isLoggedIn.value = true
-      sessionStorage.setItem('schedule_admin_logged_in', 'true')
+      sessionStorage.setItem('schedule_admin_logged_in', 'true'); void beginVisitorSession('導師', '導師密碼驗證')
       
-      try {
-        const ipRes = await fetch('https://api.ipify.org?format=json')
-        const { ip } = await ipRes.json()
-        await supabase.from('visitor_logs').insert([{ ip_address: ip, device_info: navigator.userAgent, role: '導師' }])
-      } catch(e) { console.error(e) }
+
 
       await fetchSchedule()
     } else {
@@ -320,19 +318,15 @@ const handleLogin = async () => {
   } catch (e) {
     if (passwordInput.value === '168168168') { 
        isLoggedIn.value = true; 
-       sessionStorage.setItem('schedule_admin_logged_in', 'true'); 
-       try {
-         const ipRes = await fetch('https://api.ipify.org?format=json')
-         const { ip } = await ipRes.json()
-         await supabase.from('visitor_logs').insert([{ ip_address: ip, device_info: navigator.userAgent, role: '導師(降級登入)' }])
-       } catch(e) { console.error(e) }
+       sessionStorage.setItem('schedule_admin_logged_in', 'true'); void beginVisitorSession('導師', '導師密碼驗證');
+
        await fetchSchedule() 
     }
     else alert('驗證發生錯誤。')
   } finally { isLoggingIn.value = false; passwordInput.value = '' }
 }
 
-const logout = () => { sessionStorage.removeItem('schedule_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
+const logout = () => { void endVisitorSession('導師登出'); sessionStorage.removeItem('schedule_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
 
 const fetchSchedule = async () => {
   // 載入課表資料

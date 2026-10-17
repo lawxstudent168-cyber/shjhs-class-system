@@ -50,10 +50,10 @@
           
           <div class="action-col">
             <div class="action-header">
-               <span class="action-tag" :class="getActionClass(log.action_details || log.role)">
-                 {{ getActionCategory(log.action_details || log.role) }}
+               <span class="action-tag" :class="getActionClass(log.label || log.role)">
+                 {{ getActionCategory(log.label || log.role) }}
                </span>
-               <span class="action-text">{{ log.action_details || log.role || '造訪網站' }}</span>
+               <span class="action-text">{{ log.label || log.role || '造訪網站' }}</span>
             </div>
             <div class="device-info">💻 設備：{{ log.device_info }}</div>
           </div>
@@ -65,6 +65,7 @@
 </template>
 
 <script setup>
+import { normalizeVisitorLog } from '../utils/visitorTracking.js'
 import { ref, onMounted } from 'vue'
 const supabase = useSupabaseClient()
 
@@ -102,7 +103,7 @@ const fetchLogs = async () => {
     .eq('ip_address', targetIP.value)
     .order('created_at', { ascending: false })
     .limit(300) // 顯示最近 300 筆
-  logs.value = data || []
+  logs.value = (data || []).map(normalizeVisitorLog)
   isLoading.value = false
 }
 

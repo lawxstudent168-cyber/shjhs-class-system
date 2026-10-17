@@ -42,10 +42,8 @@
           
           <button @click="currentTab = 'backup'" :class="{ active: currentTab === 'backup' }">📦 系統備份</button>
           
-          <button @click="currentTab = 'visitors'" :class="{ active: currentTab === 'visitors' }">👁️ 全網站訪客紀錄</button>
-          <button @click="currentTab = 'visitor'" :class="{ active: currentTab === 'visitor' }">📦 訪客足跡進階追蹤</button>
           <button @click="currentTab = 'classroomTracker'" :class="{ active: currentTab === 'classroomTracker' }">🖥️ 教室電腦監視器</button>
-          <button @click="currentTab = 'identityTracking'" :class="{ active: currentTab === 'identityTracking' }">🕵️ （家長與）實名足跡追蹤</button>
+          <button @click="currentTab = 'identityTracking'" :class="{ active: currentTab === 'identityTracking' }">🕵️ 家長與實名足跡追蹤（含全站紀錄）</button>
           <button @click="currentTab = 'indexButtons'" :class="{ active: currentTab === 'indexButtons' }">🎛️ 首頁按鈕控制</button>
           <button @click="currentTab = 'roleSettings'" :class="{ active: currentTab === 'roleSettings' }">🎯 首頁按鈕權限設定</button>
 
@@ -69,14 +67,12 @@
         <AdminMessages v-if="currentTab === 'messages'" />
         <AdminStudents v-if="currentTab === 'students'" />
         <AdminSecurity v-if="currentTab === 'security'" />
-        <AdminVisitors v-if="currentTab === 'visitors'" />
         <AdminAudit v-if="currentTab === 'audit'" />
         <AdminCommunication v-if="currentTab === 'communication'" />
         <AdminOfficers v-if="currentTab === 'officers'" />
         
         <AdminClassroomTracker v-if="currentTab === 'classroomTracker'" />
         <AdminIdentityTracking v-if="currentTab === 'identityTracking'" />
-        <AdminVisitorTracking v-if="currentTab === 'visitor'" />
         <AdminSettings v-if="currentTab === 'settings'" />
         <AdminMarqueeSettings v-if="currentTab === 'marqueeSettings'" />
         
@@ -93,6 +89,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, endVisitorSession, resumeVisitorSession } from '../utils/visitorTrackingClient.js'
 import { ref, onMounted } from 'vue'
 
 const supabase = useSupabaseClient()
@@ -102,6 +99,7 @@ const currentTab = ref('board')
 
 onMounted(() => {
   if (sessionStorage.getItem('main_admin_logged_in') === 'true') {
+    void resumeVisitorSession('導師')
     isUnlocked.value = true
   }
 })
@@ -128,12 +126,8 @@ const verifyPassword = async () => {
         timezoneOffset: new Date().getTimezoneOffset()
       }, retry: 0 }) } catch { /* Original admin login remains available if attachments are not configured. */ }
       isUnlocked.value = true
-      sessionStorage.setItem('main_admin_logged_in', 'true') 
-      try {
-        const ipRes = await fetch('https://api.ipify.org?format=json')
-        const { ip } = await ipRes.json()
-        await supabase.from('visitor_logs').insert([{ ip_address: ip, device_info: navigator.userAgent, role: '導師' }])
-      } catch(e) {}
+      sessionStorage.setItem('main_admin_logged_in', 'true'); void beginVisitorSession('導師', '導師密碼驗證')
+
     } else { alert('❌ 密碼錯誤！') }
   } catch (e) {
     if (passwordInput.value === '168168168') {
@@ -142,7 +136,7 @@ const verifyPassword = async () => {
         timezoneOffset: new Date().getTimezoneOffset()
       }, retry: 0 }) } catch {}
       isUnlocked.value = true
-      sessionStorage.setItem('main_admin_logged_in', 'true') 
+      sessionStorage.setItem('main_admin_logged_in', 'true'); void beginVisitorSession('導師', '導師密碼驗證')
     } else { alert('❌ 密碼錯誤或無法連線至設定檔！') }
   }
 }
@@ -150,6 +144,7 @@ const verifyPassword = async () => {
 const handleLogout = async () => {
   try { await $fetch('/api/private-media/session', { method: 'POST', body: { action: 'logout' }, retry: 0 }) }
   catch { alert('附件登出尚未完成，請恢復連線後重試。'); return }
+  void endVisitorSession('導師登出')
   isUnlocked.value = false
   passwordInput.value = ''
   sessionStorage.removeItem('main_admin_logged_in')

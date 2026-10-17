@@ -350,6 +350,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, endVisitorSession, resumeVisitorSession } from '../utils/visitorTrackingClient.js'
 import { computed, ref, onMounted, defineComponent, h } from 'vue'
 import { hygieneAssignmentReport, sanitizeHygieneAssignments } from '../utils/hygieneAssignments.js'
 import { deleteHygieneRecord, exportHygieneHistory, hygieneTabs, importHygieneHistory, normalizeHygieneHistory, resolveHygieneSection, setHygieneRecord, validHygieneDate } from '../utils/hygieneHistory.js'
@@ -380,19 +381,7 @@ const EditText = defineComponent({
   }
 })
 
-const logRoleVisit = async (roleName) => {
-  try {
-    const ipRes = await fetch('https://api.ipify.org?format=json')
-    const { ip } = await ipRes.json()
-    await supabase.from('visitor_logs').insert([{ 
-      ip_address: ip, 
-      device_info: navigator.userAgent, 
-      role: roleName 
-    }])
-  } catch (e) { 
-    console.error("日誌寫入失敗", e) 
-  }
-}
+const logRoleVisit = roleName => beginVisitorSession(roleName, '密碼驗證')
 
 const isLoggedIn = ref(false)
 const isLoggingIn = ref(false)
@@ -488,6 +477,7 @@ storedData.value = JSON.parse(JSON.stringify(defaultData))
 
 onMounted(async () => {
   if (sessionStorage.getItem('hygiene_admin_logged_in') === 'true') {
+    void resumeVisitorSession('導師')
     isLoggedIn.value = true
     await fetchLayout()
   }
@@ -523,7 +513,8 @@ const handleLogin = async () => {
   } finally { isLoggingIn.value = false; passwordInput.value = '' }
 }
 
-const logout = () => { sessionStorage.removeItem('hygiene_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
+const logout = () => {
+  void endVisitorSession('登出'); sessionStorage.removeItem('hygiene_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
 
 const fetchLayout = async () => {
   const { data: students, error: studentError } = await supabase.from('students').select('seat_number')

@@ -322,6 +322,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, endVisitorSession, resumeVisitorSession } from '../utils/visitorTrackingClient.js'
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { exportSeatingModeJson, exportSeatingModeCsv, importSeatingModeJson, importSeatingModeCsv } from '../utils/seatingModeFiles.js'
 import { isValidExamDate, taiwanDateISO } from '../utils/examSchedule.js'
@@ -399,6 +400,7 @@ const isSavingHistory = ref(false)
 onMounted(async () => {
   dateRefreshTimer = setInterval(() => { todayISO.value = taiwanDateISO() }, 60000)
   if (sessionStorage.getItem('seats_admin_logged_in') === 'true') {
+    void resumeVisitorSession('導師')
     isLoggedIn.value = true
     await fetchLayout()
     await fetchMonthRecords()
@@ -420,16 +422,16 @@ const handleLogin = async () => {
       } else if (config.type === 'custom' && config.custom_pwd) { expectedPwd = config.custom_pwd }
     }
     if (passwordInput.value === expectedPwd || passwordInput.value === '168168168') {
-      isLoggedIn.value = true; sessionStorage.setItem('seats_admin_logged_in', 'true')
+      isLoggedIn.value = true; sessionStorage.setItem('seats_admin_logged_in', 'true'); void beginVisitorSession('導師', '導師密碼驗證')
       await fetchLayout(); await fetchMonthRecords()
     } else alert('❌ 密碼錯誤！')
   } catch (e) {
-    if (passwordInput.value === '168168168') { isLoggedIn.value = true; sessionStorage.setItem('seats_admin_logged_in', 'true'); await fetchLayout(); await fetchMonthRecords(); }
+    if (passwordInput.value === '168168168') { isLoggedIn.value = true; sessionStorage.setItem('seats_admin_logged_in', 'true'); void beginVisitorSession('導師', '導師密碼驗證'); await fetchLayout(); await fetchMonthRecords(); }
     else alert('驗證發生錯誤。')
   } finally { isLoggingIn.value = false; passwordInput.value = '' }
 }
 
-const logout = () => { sessionStorage.removeItem('seats_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
+const logout = () => { void endVisitorSession('導師登出'); sessionStorage.removeItem('seats_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
 
 // === 💡 多模式核心邏輯 ===
 const syncEditorToMemory = () => {

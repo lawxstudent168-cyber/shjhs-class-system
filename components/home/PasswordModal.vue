@@ -14,6 +14,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import { trackVisitorEvent } from '../../app/utils/visitorTrackingClient.js'
 import { passwordModalRole } from '../../app/utils/teacherUnlock.js'
 
 const props = defineProps({
@@ -32,7 +33,10 @@ watch(() => props.show, () => { pwdInput.value = '' })
 const submit = () => {
   const role = passwordModalRole(pwdInput.value, props.target, props.officerPasswords)
   if (role) emit('success', { target: props.target, role })
-  else alert('❌ 密碼錯誤！請確認密碼是否正確。')
+  else {
+    void trackVisitorEvent({ kind: 'operation', label: '密碼驗證', details: props.target, outcome: '失敗' })
+    alert('❌ 密碼錯誤！請確認密碼是否正確。')
+  }
 }
 </script>
 

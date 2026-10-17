@@ -53,6 +53,7 @@
 </template>
 
 <script setup>
+import { beginVisitorSession, endVisitorSession, trackVisitorEvent } from '../utils/visitorTrackingClient.js'
 import { ref, onMounted, nextTick } from 'vue'
 const supabase = useSupabaseClient()
 
@@ -109,7 +110,8 @@ const verifyIdentity = async () => {
         birthday: studentBirthday.value, idLast5: studentIdLast5.value
       }, retry: 0 })
     } catch { /* Text messages keep their original login; the attachment panel displays its own error. */ }
-    verifiedStudentName.value = data.real_name; isVerified.value = true; await loadChatHistory()
+    verifiedStudentName.value = data.real_name; isVerified.value = true;
+    void beginVisitorSession(`${data.real_name} 學生`, '學生私訊身分驗證'); await loadChatHistory()
   } catch (error) { showMessage('error', '系統錯誤'); } finally { isLoading.value = false }
 }
 
@@ -117,7 +119,9 @@ const loadChatHistory = async () => { const { data } = await supabase.from('priv
 const sendMessage = async () => {
   if (!newMessage.value.trim()) return; isSending.value = true
   try {
-    await supabase.from('private_messages').insert({ student_id: selectedStudentId.value, sender_role: '學生', chat_type: '學生', content: newMessage.value, is_read_by_teacher: false })
+    const { error: sendError } = await supabase.from('private_messages').insert({ student_id: selectedStudentId.value, sender_role: '學生', chat_type: '學生', content: newMessage.value, is_read_by_teacher: false })
+    if (sendError) throw sendError
+    void trackVisitorEvent({ kind: 'operation', label: '傳送學生私訊', outcome: '成功' })
     newMessage.value = ''; await loadChatHistory()
   } catch (error) { alert('傳送失敗') } finally { isSending.value = false }
 }
@@ -125,6 +129,7 @@ const sendMessage = async () => {
 const logout = async () => {
   try { await $fetch('/api/private-media/session', { method: 'POST', body: { action: 'logout' }, retry: 0 }) }
   catch { alert('附件登出尚未完成，請恢復連線後重試。'); return }
+  void endVisitorSession('私訊登出')
   isVerified.value = false; studentBirthday.value = ''; studentIdLast5.value = ''; chatMessages.value = []
 }
 const formatTime = (isoString) => new Date(isoString).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
