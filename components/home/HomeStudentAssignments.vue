@@ -1,5 +1,5 @@
 <template>
-  <div v-if="matchedStudent && studentStats" class="student-assign-card">
+  <div v-if="matchedStudent && studentStats" class="student-assign-card" data-track-feature="個人作業／物品繳交確認">
     <div class="card-header">
       <h3>📝 {{ matchedStudent.real_name }} 的作業/物品繳交確認清單</h3>
       <span v-if="studentStats.missing.length === 0" class="badge success">💯 作業全齊，太棒了！</span>

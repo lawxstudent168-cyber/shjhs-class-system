@@ -1,10 +1,13 @@
-import { visitorEventPrefix } from './visitorTracking.js'
+import { visitorEventPrefix, contactHistoryViewer } from './visitorTracking.js'
 
 let activeTracker = null
 export const configureVisitorTracker = tracker => { activeTracker = tracker }
 export const trackVisitorEvent = event => activeTracker?.record(event) || Promise.resolve(false)
 export const beginVisitorSession = (identity, source = '密碼驗證') => activeTracker?.login(identity, source) || Promise.resolve(false)
-export const resumeVisitorSession = identity => activeTracker?.resume(identity) || Promise.resolve(false)
+export const getVisitorContext = () => activeTracker?.context() || null
+export const subscribeVisitorContext = listener => activeTracker?.subscribe(listener) || (() => {})
+export const beginContactHistorySession = isTeacher => activeTracker?.historyLogin(isTeacher) || Promise.resolve(false)
+export const resumeVisitorSession = (identity, source) => activeTracker?.resume(identity, source) || Promise.resolve(false)
 export const endVisitorSession = label => activeTracker?.logout(label) || Promise.resolve(false)
 
 export function createVisitorTracker({ client, local, session, getIP, getPath, userAgent, uuid, now = Date.now, onError = () => {} }) {
@@ -16,11 +19,16 @@ export function createVisitorTracker({ client, local, session, getIP, getPath, u
   let state
   try { state = JSON.parse(read(session, 'visitor_tracking_session')) } catch { /* Start a session below. */ }
   if (!state?.id || typeof state.identity !== 'string') state = { id: uuid(), identity: remembered(), source: remembered() === '匿名來訪者' ? '匿名' : '裝置記憶身分（本次未重新驗證）', path: getPath(), last: now() }
+  const listeners = new Set()
+  const context = () => ({ identity: state.identity, sessionId: state.id, source: state.source })
+  const notify = () => listeners.forEach(listener => { try { listener(context()) } catch { /* Observers cannot block authentication. */ } })
+  const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener) }
   const persist = () => write(session, 'visitor_tracking_session', JSON.stringify(state))
   const record = async ({ kind, label, details = '', outcome = '', path = getPath() }) => {
     // Start a separate continuation after inactivity; never count it as a fresh login.
     if (now() - state.last > 30 * 60 * 1000) {
       state = { id: uuid(), identity: state.identity, source: '閒置後延續身分（本次未重新驗證）', path, last: now() }
+      notify()
     }
     state.last = now()
     persist()
@@ -36,19 +44,28 @@ export function createVisitorTracker({ client, local, session, getIP, getPath, u
   }
   const login = (identity, source = '密碼驗證') => {
     state = { id: uuid(), identity: String(identity || '未知身分'), source, path: getPath(), last: now() }
-    return record({ kind: 'login', label: '登入／身分驗證成功', outcome: '成功' })
+    const pending = record({ kind: 'login', label: '登入／身分驗證成功', outcome: '成功' })
+    notify()
+    return pending
   }
-  const resume = identity => {
+  const resume = (identity, source = '登入狀態延續（本次未重新驗證）') => {
     if (state.identity === identity && state.path === getPath()) return Promise.resolve(true)
-    state = { id: uuid(), identity: String(identity), source: '登入狀態延續（本次未重新驗證）', path: getPath(), last: now() }
-    return record({ kind: 'operation', label: '延續既有登入狀態' })
+    state = { id: uuid(), identity: String(identity), source, path: getPath(), last: now() }
+    const pending = record({ kind: 'operation', label: '延續既有登入狀態' })
+    notify()
+    return pending
+  }
+  const historyLogin = isTeacher => {
+    const viewer = contactHistoryViewer(isTeacher, state.identity, remembered())
+    return login(viewer.identity, viewer.source)
   }
   const logout = async (label = '登出') => {
     const pending = record({ kind: 'logout', label, outcome: '成功' })
     state = { id: uuid(), identity: remembered(), source: remembered() === '匿名來訪者' ? '匿名' : '裝置記憶身分（本次未重新驗證）', path: getPath(), last: now() }
     persist()
+    notify()
     return pending
   }
   persist()
-  return { record, login, logout, resume }
+  return { record, login, logout, resume, context, subscribe, historyLogin }
 }

@@ -97,3 +97,37 @@ test('storage restrictions and failed writes do not block the original user acti
   assert.equal(await tracker.login('導師'), false)
   assert.equal(errors, 1)
 })
+
+test('contact-book viewer keeps a named parent or student, never borrows a teacher identity for shared-password access', async () => {
+  const { contactHistoryViewer } = await import('../app/utils/visitorTracking.js')
+  assert.equal(contactHistoryViewer(false, '3號 王同學 學生', '1號 林同學 家長').identity, '3號 王同學 學生')
+  assert.equal(contactHistoryViewer(false, '導師', '1號 林同學 家長(母)').identity, '1號 林同學 家長(母)')
+  assert.equal(contactHistoryViewer(false, '導師', '匿名來訪者').identity, '家長／學生（未具名）')
+  assert.equal(groupVisitorLogs([row(1, '家長／學生（未具名）', 's1')], 'identity').length, 0)
+  assert.match(contactHistoryViewer(false, '家長／學生（未具名）', '').source, /無個人身分/)
+  assert.equal(contactHistoryViewer(true, '3號 王同學 學生', '').identity, '導師')
+})
+
+test('contact-book query, content display and other interactions remain in the viewer personal record', async () => {
+  const writes = []
+  let sequence = 0
+  const tracker = createVisitorTracker({ client: { from: () => ({ insert: async rows => { writes.push(...rows); return {} } }) },
+    local: storage({ visitor_known_identity: '1號 林同學 家長(母)' }), session: storage(), getIP: async () => '1.2.3.4',
+    getPath: () => '/history', userAgent: 'UA', uuid: () => `id-${++sequence}` })
+  let changes = 0
+  const unsubscribe = tracker.subscribe(() => changes++)
+  await tracker.historyLogin(false)
+  await tracker.record({ kind: 'operation', label: '查詢近期聯絡簿', details: '2026-10-10 至 2026-10-17，查得 5 日紀錄', outcome: '查詢成功（不代表已閱讀）' })
+  await tracker.record({ kind: 'view', label: '今日聯絡簿進入可視範圍', outcome: '已顯示至少 1 秒（不代表已閱讀）' })
+  await tracker.record({ kind: 'interaction', label: '點選功能：今日聯絡簿' })
+  const logs = writes.map(normalizeVisitorLog)
+  assert.equal(groupVisitorLogs(logs, 'identity').length, 1)
+  assert.ok(logs.every(log => log.identity === '1號 林同學 家長(母)'))
+  assert.equal(new Set(logs.map(log => log.sessionId)).size, 1)
+  assert.equal(filterVisitorLogs(logs, { search: '聯絡簿' }).length, 4)
+  assert.equal(filterVisitorLogs(logs, { kind: 'view' }).length, 1)
+  assert.equal(changes, 1)
+  unsubscribe()
+  await tracker.login('導師')
+  assert.equal(changes, 1)
+})

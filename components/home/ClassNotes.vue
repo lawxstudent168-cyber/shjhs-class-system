@@ -1,8 +1,8 @@
 <template>
-  <div class="notes-board">
+  <div class="notes-board" data-track-feature="本週班級注意事項">
     <!-- 💡 將原本的 header 改造為可點擊的摺疊開關群組 -->
     <div class="board-header">
-      <div class="title-group" @click="toggleExpand" title="點擊展開/收合">
+      <div class="title-group" data-track-action="展開／收合本週班級注意事項" @click="toggleExpand" title="點擊展開/收合">
         <h2 class="board-title notes-title">⚡ 本週班級注意事項</h2>
         <span class="toggle-icon">{{ isExpanded ? '▲' : '▼' }}</span>
         <p class="board-date">{{ todayDisplay }}</p>

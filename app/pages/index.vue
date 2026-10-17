@@ -142,7 +142,9 @@
               @update-date="updateEditingClassNoteDate"
             />
 
-            <ContactBook 
+            <ContactBook
+              :trackingReady="contactBookLoaded && !showIdentityModal && !showPwdModal && !isEditingContact"
+              :trackingDate="todayISO"
               :contactBookItems="contactBookItems"
               :editingContactItems="editingContactItems"
               :isEditingContact="isEditingContact"
@@ -298,7 +300,7 @@ const {
 
 // 3. 🧠 資料抓取大腦
 const {
-  contactBookItems, officerPasswords, isHistoryVisibleOnIndex, globalButtonSettings, roleButtonSettings, clockConfig,
+  contactBookItems, contactBookLoaded, officerPasswords, isHistoryVisibleOnIndex, globalButtonSettings, roleButtonSettings, clockConfig,
   announcements, parentAnnouncements, isAnnouncementVisibleOnIndex, isParentAnnouncementVisibleOnIndex, isNoticeBoardVisibleOnIndex,
   scheduleData, scheduleButtonConfig, examData, autoRefreshConfig, indexModulesConfig, indexDynamicSorting, isWikiFeaturedVisible,
   youtubeSchedule, youtubeIsMuted, youtubeBlockedDates, englishSongSchedule, parentNotices, classNoteItems, allClassNoteItems, seatingChart, hygieneData,

@@ -1,5 +1,5 @@
 <template>
-  <div class="blackboard contact-board">
+  <div ref="board" class="blackboard contact-board" data-track-feature="今日聯絡簿" :data-track-context="trackingDate ? '聯絡簿日期：' + trackingDate : ''">
     <div class="board-header">
       <div>
         <h2 class="board-title contact-title">⭐ 今日聯絡簿</h2>
@@ -44,13 +44,20 @@
 </template>
 
 <script setup>
-defineProps({
+import { ref } from 'vue'
+import { useFeatureExposure } from '../../app/composables/useFeatureExposure.js'
+const props = defineProps({
+  trackingReady: { type: Boolean, default: false },
+  trackingDate: { type: String, default: '' },
   contactBookItems: Array,
   editingContactItems: Array,
   isEditingContact: Boolean,
   todayDisplay: String,
   privacyFilter: Function
 })
+
+const board = ref(null)
+useFeatureExposure(board, () => ({ ready: props.trackingReady && !props.isEditingContact, feature: '今日聯絡簿', context: props.trackingDate ? '聯絡簿日期：' + props.trackingDate : '' }))
 
 defineEmits(['open-pwd', 'cancel-edit', 'save-items', 'add-item', 'remove-item', 'update-item'])
 </script>

@@ -21,7 +21,7 @@
     <nav class="view-tabs" aria-label="足跡檢視方式">
       <button v-for="tab in tabs" :key="tab.id" :class="{ active: mode === tab.id }" @click="mode = tab.id; selectedKey = ''">{{ tab.label }}</button>
     </nav>
-    <p class="note">統計與文字篩選以目前載入資料為準，可按下方「載入更多」。時間皆為台灣時間。具名身分依登入時提供的名稱歸戶；「導師」等共用角色不能辨識是哪一位個人。點擊紀錄只表示按下按鈕，實際完成的操作另標示結果。</p>
+    <p class="note">統計與文字篩選以目前載入資料為準，可按下方「載入更多」。時間皆為台灣時間。具名身分依登入時提供的名稱歸戶；「導師」等共用角色不能辨識是哪一位個人。點擊紀錄只表示按下按鈕，實際完成的操作另標示結果。「內容顯示」只代表出現在可視範圍，不代表已閱讀。</p>
     <p class="note">舊紀錄保留原始內容；沒有身分或登入階段的紀錄不會根據 IP 自動歸戶。瀏覽器記憶身分與本次重新驗證會分開標示。</p>
     <div v-if="loading && !logs.length" class="empty" role="status">載入中…</div>
     <div v-else-if="mode === 'all'" class="all-records">

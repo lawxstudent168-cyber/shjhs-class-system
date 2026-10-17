@@ -11,6 +11,7 @@ import { resolveHygieneForDate } from '../utils/hygieneHistory.js'
 export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCategoryRef, currentIdentityRef, allStudentsRef, allStudentsForLoginRef, todayAttendancesRef, nowTickRef) {
   const attendanceLockTime = ref('08:00')
   const contactBookItems = ref([])
+  const contactBookLoaded = ref(false)
   const officerPasswords = ref({ academic: '', counseling: '', discipline: '', teacher: '168168168' })
   const isHistoryVisibleOnIndex = ref(false)
   const globalButtonSettings = ref({})
@@ -86,8 +87,9 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
     const activeRoleCategory = unref(activeRoleCategoryRef)
     const currentIdentity = unref(currentIdentityRef)
 
-    const { data: boardData } = await supabase.from('contact_books').select('contact_items').eq('record_date', todayISO).maybeSingle()
-    contactBookItems.value = boardData?.contact_items || []
+    const { data: boardData, error: boardError } = await supabase.from('contact_books').select('contact_items').eq('record_date', todayISO).maybeSingle()
+    if (!boardError) contactBookItems.value = boardData?.contact_items || []
+    contactBookLoaded.value = !boardError
 
     const keysToFetch = [
       'attendance_lock_time', 'board_officer_passwords', 'seating_chart_data', 'hygiene_management_data',
@@ -213,7 +215,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
   }
 
   return {
-    contactBookItems, officerPasswords, isHistoryVisibleOnIndex, globalButtonSettings, roleButtonSettings, clockConfig,
+    contactBookItems, contactBookLoaded, officerPasswords, isHistoryVisibleOnIndex, globalButtonSettings, roleButtonSettings, clockConfig,
     announcements, parentAnnouncements, isAnnouncementVisibleOnIndex, isParentAnnouncementVisibleOnIndex, isNoticeBoardVisibleOnIndex,
     scheduleData, scheduleButtonConfig, examData, autoRefreshConfig, indexModulesConfig, indexDynamicSorting, isWikiFeaturedVisible,
     youtubeSchedule, youtubeIsMuted, youtubeBlockedDates, englishSongSchedule, parentNotices, classNoteItems, allClassNoteItems, seatingChart, hygieneData,

@@ -1,4 +1,4 @@
-import { beginVisitorSession } from '../utils/visitorTrackingClient.js'
+import { beginVisitorSession, resumeVisitorSession } from '../utils/visitorTrackingClient.js'
 import { ref, computed } from 'vue'
 
 export function useIdentityGuard(supabase) {
@@ -36,6 +36,7 @@ export function useIdentityGuard(supabase) {
 
   const checkIdentity = () => {
     currentIdentity.value = localStorage.getItem('visitor_known_identity') || '匿名來訪者'
+    void resumeVisitorSession(currentIdentity.value, '首頁裝置記憶身分（本次未重新驗證）')
     if (!isIpBrownlisted.value && currentIdentity.value === '匿名來訪者') {
       showIdentityModal.value = true
     }

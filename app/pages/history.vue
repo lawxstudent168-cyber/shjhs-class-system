@@ -71,7 +71,7 @@
       </div>
 
       <!-- 📋 歷史紀錄列表 -->
-      <div class="history-content">
+      <div class="history-content" data-track-feature="近期聯絡簿查詢">
         <h3 class="content-title">📌 近 {{ settings.visible_days }} 日聯絡簿事項</h3>
         
         <div v-if="isLoading" class="loading-state">⏳ 紀錄搜尋中，請稍候...</div>
@@ -80,7 +80,7 @@
         </div>
         
         <div v-else class="history-timeline">
-          <div v-for="record in records" :key="record.record_date" class="history-card">
+          <div v-for="record in records" :key="record.record_date" class="history-card" data-track-feature="歷史聯絡簿紀錄" :data-track-context="'聯絡簿日期：' + record.record_date">
             <div class="history-date">{{ formatDisplayDate(record.record_date) }}</div>
             <ul class="item-list">
               <li v-for="(item, idx) in record.contact_items" :key="idx">
@@ -95,6 +95,7 @@
 </template>
 
 <script setup>
+import { beginContactHistorySession, trackVisitorEvent } from '../utils/visitorTrackingClient.js'
 // 💡 確保核心套件完整引入，防止出現 500 系統報錯
 import { ref, onMounted } from 'vue'
 
@@ -174,27 +175,18 @@ const handleLogin = async () => {
       }
     }
 
-    let roleName = ''
-
     if (passwordInput.value === expectedTeacherPwd || passwordInput.value === '168168168') {
       isTeacher.value = true
       isUnlocked.value = true
-      roleName = '導師'
     } else if (settings.value.viewer_password && passwordInput.value === settings.value.viewer_password) {
       isTeacher.value = false
       isUnlocked.value = true
-      roleName = '家長/學生'
     } else {
       alert('❌ 密碼錯誤！請確認後再試。')
       return
     }
 
-    // 紀錄登入軌跡
-    try {
-      const ipRes = await fetch('https://api.ipify.org?format=json')
-      const { ip } = await ipRes.json()
-      await supabase.from('visitor_logs').insert([{ ip_address: ip, device_info: navigator.userAgent, role: `${roleName}(查詢聯絡簿)` }])
-    } catch(e) {}
+    void beginContactHistorySession(isTeacher.value)
 
     await fetchRecords()
 
@@ -244,7 +236,9 @@ const fetchRecords = async () => {
     if (error) throw error
 
     records.value = data ? data.filter(r => r.contact_items && r.contact_items.length > 0) : []
+    void trackVisitorEvent({ kind: 'operation', label: '查詢近期聯絡簿', details: `${startStr} 至 ${endStr}，查得 ${records.value.length} 日紀錄`, outcome: '查詢成功（不代表已閱讀）' })
   } catch (e) {
+    void trackVisitorEvent({ kind: 'operation', label: '查詢近期聯絡簿', outcome: '查詢失敗' })
     console.error("載入歷史紀錄發生錯誤", e)
   } finally {
     isLoading.value = false
