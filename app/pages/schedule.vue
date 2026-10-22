@@ -29,12 +29,42 @@
       <header class="workspace-header">
         <h2>🗓️ 班級課表管理系統</h2>
         <div class="header-actions">
-          <button @click="saveSchedule" class="btn-save" :disabled="isSaving">
-            {{ isSaving ? '⏳ 儲存中...' : '💾 儲存並發布' }}
+          <button @click="saveSchedule" class="btn-save" :disabled="isSaving || isLoading || !hasLoaded">
+            {{ isSaving ? '⏳ 儲存中...' : '💾 儲存各學期與首頁設定' }}
           </button>
           <button @click="logout" class="btn-logout">登出</button>
         </div>
       </header>
+
+      <p v-if="loadError" class="load-error" role="alert">{{ loadError }} <button @click="fetchSchedule" :disabled="isLoading">重新載入</button></p>
+      <p v-if="hasLoaded" class="save-state" role="status">{{ hasUnsavedChanges ? '尚有未儲存的修改，切換學期會保留草稿。' : '各學期課表已儲存。' }}</p>
+      <fieldset class="editor-fields" :disabled="isSaving || isLoading || !hasLoaded">
+      <section class="semester-section" data-track-feature="學期課表管理">
+        <div class="semester-controls">
+          <label>正在編輯的學期
+            <select :value="editingTerm" @change="changeSemester($event.target.value)">
+              <option v-for="term in scheduleSemesters" :key="term.id" :value="term.id">{{ term.label }}{{ scheduleBank.terms[term.id] ? '' : '（尚未建立）' }}</option>
+            </select>
+          </label>
+          <label>首頁目前使用的學期（儲存後套用）
+            <select v-model="scheduleBank.activeTerm">
+              <option v-for="term in availableSemesters" :key="term.id" :value="term.id">{{ term.label }}</option>
+            </select>
+          </label>
+        </div>
+        <p>目前編輯：<strong>{{ scheduleSemesterLabel(editingTerm) }}</strong>。各學期獨立儲存；切換編輯學期不會自動更換首頁課表。</p>
+        <div class="copy-controls">
+          <strong>將目前編輯內容複製到：</strong>
+          <button type="button" @click="copyTargets = scheduleSemesters.filter(term => term.id !== editingTerm).map(term => term.id)">全選其他學期</button>
+          <div class="copy-targets">
+            <label v-for="term in scheduleSemesters.filter(term => term.id !== editingTerm)" :key="term.id">
+              <input v-model="copyTargets" type="checkbox" :value="term.id" />{{ term.label }}{{ scheduleBank.terms[term.id] ? '（已有課表）' : '' }}
+            </label>
+          </div>
+          <button type="button" class="btn-copy" :disabled="!copyTargets.length" @click="copyCurrentSemester">複製到所選學期</button>
+        </div>
+        <p class="semester-hint">複製包含科目、教師、節次及時間。複製後可切換各學期修改，最後按上方儲存；已有課表需確認後才會覆蓋。</p>
+      </section>
 
       <!-- 💡 大螢幕展示按鈕與首頁顯示設定 -->
       <div class="settings-section">
@@ -134,12 +164,13 @@
           </tbody>
         </table>
       </div>
+      </fieldset>
     </div>
 
     <!-- 💡 全螢幕大字體課表展示 Modal (後台預覽用) -->
     <div v-if="showLargeSchedule" class="large-schedule-overlay">
       <div class="large-header">
-        <h1 class="large-title">📅 班級課表</h1>
+        <h1 class="large-title">📅 {{ scheduleSemesterLabel(editingTerm) }}課表（編輯預覽）</h1>
         <button class="btn-close-large" @click="showLargeSchedule = false">✖ 關閉展示</button>
       </div>
 
@@ -192,14 +223,21 @@
 </template>
 
 <script setup>
-import { beginVisitorSession, endVisitorSession, resumeVisitorSession } from '../utils/visitorTrackingClient.js'
+import { beginVisitorSession, endVisitorSession, resumeVisitorSession, trackVisitorEvent } from '../utils/visitorTrackingClient.js'
 import { ref, computed, onMounted } from 'vue'
+import { scheduleSemesters, scheduleSemesterLabel, normalizeClassSchedule, normalizeSemesterSchedules, copySemesterSchedules, serializeSemesterSchedules } from '../utils/semesterSchedules.js'
 const supabase = useSupabaseClient()
 
 const isLoggedIn = ref(false)
 const isLoggingIn = ref(false)
 const passwordInput = ref('')
 const isSaving = ref(false)
+const isLoading = ref(false)
+const hasLoaded = ref(false)
+const loadError = ref('')
+const editingTerm = ref('7-1')
+const copyTargets = ref([])
+const savedState = ref('')
 
 const mockDay = ref(1) // 1=星期一
 const mockTime = ref('08:10')
@@ -233,7 +271,28 @@ const defaultSchedule = {
   ]
 }
 
-const scheduleData = ref(JSON.parse(JSON.stringify(defaultSchedule)))
+const scheduleBank = ref(normalizeSemesterSchedules(null, defaultSchedule))
+const scheduleData = computed(() => scheduleBank.value.terms[editingTerm.value])
+const availableSemesters = computed(() => scheduleSemesters.filter(term => scheduleBank.value.terms[term.id]))
+const currentState = () => JSON.stringify({ bank: scheduleBank.value, settings: indexSettings.value })
+const hasUnsavedChanges = computed(() => hasLoaded.value && currentState() !== savedState.value)
+const changeSemester = term => {
+  if (!scheduleSemesters.some(item => item.id === term)) return
+  if (!scheduleBank.value.terms[term]) scheduleBank.value.terms[term] = normalizeClassSchedule(defaultSchedule)
+  editingTerm.value = term
+  copyTargets.value = []
+}
+const copyCurrentSemester = () => {
+  const existing = copyTargets.value.filter(term => scheduleBank.value.terms[term])
+  if (existing.length && !confirm(`以下學期已有課表：${existing.map(scheduleSemesterLabel).join('、')}。確定要用目前內容覆蓋這些草稿嗎？儲存後才會更新資料庫。`)) return
+  try {
+    const targets = [...copyTargets.value]
+    scheduleBank.value = copySemesterSchedules(scheduleBank.value, editingTerm.value, targets, Boolean(existing.length))
+    copyTargets.value = []
+    void trackVisitorEvent({ kind: 'operation', label: '複製學期課表', details: `${scheduleSemesterLabel(editingTerm.value)} → ${targets.map(scheduleSemesterLabel).join('、')}`, outcome: '已建立草稿（尚未儲存）' })
+    alert('✅ 複製完成！請切換各學期修改，最後按「儲存各學期與首頁設定」。')
+  } catch (error) { alert(error.message) }
+}
 
 const previewDisplay = computed(() => {
   if (!scheduleData.value || !scheduleData.value.periods) return null
@@ -326,63 +385,42 @@ const handleLogin = async () => {
   } finally { isLoggingIn.value = false; passwordInput.value = '' }
 }
 
-const logout = () => { void endVisitorSession('導師登出'); sessionStorage.removeItem('schedule_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
+const logout = () => { if (hasUnsavedChanges.value && !confirm('仍有未儲存的課表修改，確定放棄並登出？')) return; void endVisitorSession('導師登出'); sessionStorage.removeItem('schedule_admin_logged_in'); isLoggedIn.value = false; navigateTo('/') }
 
 const fetchSchedule = async () => {
-  // 載入課表資料
-  const { data } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'class_schedule_data').maybeSingle()
-  
-  if (data?.setting_value && data.setting_value.periods) {
-    let loadedPeriods = data.setting_value.periods
-    
-    if (!loadedPeriods.find(p => p.name === '早掃時間')) {
-      const idx = loadedPeriods.findIndex(p => p.name === '早修')
-      if(idx !== -1) {
-        loadedPeriods.splice(idx + 1, 0, { name: '早掃時間', startTime: '08:00', endTime: '08:15', days: Array(5).fill().map(() => ({ subject: '', teacher: '' })) })
-      }
-    }
-    
-    if (!loadedPeriods.find(p => p.name === '午餐和午掃') && !loadedPeriods.find(p => p.name === '午餐和午掃時間')) {
-      const idx = loadedPeriods.findIndex(p => p.name === '第四節')
-      if(idx !== -1) {
-        loadedPeriods.splice(idx + 1, 0, { name: '午餐和午掃', startTime: '11:50', endTime: '12:25', days: Array(5).fill().map(() => ({ subject: '', teacher: '' })) })
-      }
-    }
-    
-    scheduleData.value.periods = loadedPeriods
-  } else {
-    scheduleData.value = JSON.parse(JSON.stringify(defaultSchedule))
-  }
-
-  // 載入首頁按鈕設定
-  const { data: btnData } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'schedule_button_settings').maybeSingle()
-  if (btnData?.setting_value) {
-    // 💡 確保讀取舊資料時保留預設值 (若無該欄位自動補上 true)
-    indexSettings.value = { teacherOnlyInBrownlist: true, ...btnData.setting_value }
-  }
+  isLoading.value = true; loadError.value = ''; hasLoaded.value = false
+  try {
+    const { data, error } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'class_schedule_data').maybeSingle()
+    if (error) throw error
+    const { data: btnData, error: buttonError } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'schedule_button_settings').maybeSingle()
+    if (buttonError) throw buttonError
+    scheduleBank.value = normalizeSemesterSchedules(data?.setting_value, defaultSchedule)
+    editingTerm.value = scheduleBank.value.activeTerm
+    copyTargets.value = []
+    indexSettings.value = { isVisible: true, visibility: 'both', teacherOnlyInBrownlist: true, ...btnData?.setting_value }
+    savedState.value = currentState()
+    hasLoaded.value = true
+  } catch { loadError.value = '課表載入失敗，請重新載入。為避免覆蓋原課表，目前暫停儲存。' }
+  finally { isLoading.value = false }
 }
 
 const saveSchedule = async () => {
+  if (!hasLoaded.value || isLoading.value || isSaving.value) return
   isSaving.value = true
   try {
-    // 儲存課表
-    await supabase.from('system_settings').upsert({
-      setting_key: 'class_schedule_data',
-      setting_value: scheduleData.value
-    }, { onConflict: 'setting_key' })
-
-    // 儲存首頁按鈕設定
-    await supabase.from('system_settings').upsert({
-      setting_key: 'schedule_button_settings',
-      setting_value: indexSettings.value
-    }, { onConflict: 'setting_key' })
-    
-    alert('✅ 課表與顯示設定已成功儲存並同步！')
-  } catch (err) {
-    alert('❌ 儲存失敗：' + err.message)
-  } finally {
-    isSaving.value = false
-  }
+    const payload = serializeSemesterSchedules(scheduleBank.value)
+    const settings = JSON.parse(JSON.stringify(indexSettings.value))
+    const snapshot = currentState()
+    const { error } = await supabase.from('system_settings').upsert([
+      { setting_key: 'class_schedule_data', setting_value: payload },
+      { setting_key: 'schedule_button_settings', setting_value: settings }
+    ], { onConflict: 'setting_key' })
+    if (error) throw error
+    savedState.value = snapshot
+    void trackVisitorEvent({ kind: 'operation', label: '儲存學期課表', details: `已儲存 ${Object.keys(payload.terms).length} 個學期；首頁使用${scheduleSemesterLabel(payload.activeTerm)}`, outcome: '成功' })
+    alert(`✅ 各學期課表與顯示設定已儲存！首頁使用「${scheduleSemesterLabel(payload.activeTerm)}」。`)
+  } catch (err) { alert('❌ 儲存失敗：' + err.message) }
+  finally { isSaving.value = false }
 }
 
 const openLargeSchedule = () => {
@@ -393,6 +431,20 @@ const openLargeSchedule = () => {
 </script>
 
 <style scoped>
+.editor-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.semester-section { background: white; border: 1px solid #cbd5e1; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+.semester-controls { display: flex; gap: 20px; flex-wrap: wrap; }
+.semester-controls > label { display: flex; flex-direction: column; gap: 8px; font-weight: bold; color: #334155; }
+.semester-controls select { font: inherit; padding: 9px; border: 1px solid #94a3b8; border-radius: 6px; background: white; }
+.copy-controls { border-top: 1px solid #e2e8f0; padding-top: 14px; }
+.copy-controls button { cursor: pointer; padding: 8px 12px; border: 1px solid #94a3b8; border-radius: 6px; margin: 6px; }
+.copy-controls button:disabled { opacity: .5; cursor: default; }
+.copy-targets { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0; }
+.copy-targets label { display: flex; align-items: center; gap: 6px; }
+.btn-copy { background: #0f766e; color: white; }
+.semester-hint, .save-state { color: #475569; line-height: 1.6; }
+.load-error { background: #fef2f2; color: #b91c1c; padding: 14px; }
+
 .schedule-page { min-height: 100vh; background: #f1f5f9; font-family: sans-serif; padding-bottom: 50px;}
 .login-container { display: flex; justify-content: center; align-items: center; min-height: 80vh; padding: 20px; }
 .login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }

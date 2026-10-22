@@ -1,7 +1,7 @@
 <template>
   <div class="large-schedule-overlay">
     <div class="large-header">
-      <h1 class="large-title">📅 班級課表</h1>
+      <h1 class="large-title">📅 班級課表<span v-if="scheduleData?.semesterLabel"> · {{ scheduleData.semesterLabel }}</span></h1>
       
       <div class="large-controls">
         <label class="control-label">
