@@ -9,7 +9,7 @@
     </div>
     <div v-else class="news-layout-wrapper">
       <p v-if="newsData.stale" class="notice" role="status">{{ isLoading ? '正在更新，先顯示上次成功取得的新聞。' : '目前顯示上次成功取得的新聞，更新暫時延遲。' }}</p>
-      <a :href="newsData.link" target="_blank" rel="noopener noreferrer" class="news-link" :title="`前往 ${source.name} 閱讀新聞`">
+      <a :href="newsData.link" target="_blank" rel="noopener noreferrer" class="news-link" :class="{ 'text-only': !newsData.image || imageFailed }" :title="`前往 ${source.name} 閱讀新聞`">
         <div v-if="newsData.image && !imageFailed" class="news-image-wrapper">
           <img :src="newsData.image" :alt="newsData.title" class="news-image" loading="lazy" @error="imageFailed = true" />
         </div>
@@ -61,6 +61,13 @@ onBeforeUnmount(() => controller?.abort())
 </script>
 
 <style scoped>
+@font-face {
+  font-family: 'News Caveat';
+  src: url('/fonts/caveat-latin-500-normal.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
 .news-card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,.05); border: 1px solid #e2e8f0; margin-top: 20px; }
 header { border-bottom: 2px dashed #e2e8f0; padding-bottom: 10px; margin-bottom: 15px; }
 h3 { margin: 0; color: #003366; font-size: 1.25rem; }
@@ -73,6 +80,12 @@ h3 { margin: 0; color: #003366; font-size: 1.25rem; }
 .news-title-box { padding: 15px 20px; background: white; border-top: 4px solid #c00; }
 .abc-news-card .news-title-box { border-color: #3b82f6; }
 .news-title { color: #1e293b; font-size: 1.2rem; font-weight: bold; line-height: 1.5; margin: 0; }
+.text-only .news-title {
+  font-family: 'News Caveat', 'Segoe Print', 'Bradley Hand', 'KaiTi', cursive;
+  font-size: clamp(1.5rem, 2.5vw, 1.9rem);
+  font-weight: 500;
+  line-height: 1.5;
+}
 .status { text-align: center; padding: 30px; color: #64748b; background: #f8fafc; border-radius: 6px; line-height: 2; }
 .status button, .status a { margin: 0 8px; }
 .status button { cursor: pointer; padding: 4px 12px; border: 1px solid #94a3b8; border-radius: 5px; background: white; }
