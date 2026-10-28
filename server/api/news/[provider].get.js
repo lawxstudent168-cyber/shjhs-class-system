@@ -1,6 +1,8 @@
 import { createNewsService, isNewsProvider } from '../../utils/newsHeadlines.js'
 
-const getHeadline = createNewsService()
+const getHeadline = createNewsService({
+  onFailure: (provider, failures) => console.warn('[news] All sources failed', { provider, failures })
+})
 
 export default defineEventHandler(async event => {
   const provider = getRouterParam(event, 'provider')

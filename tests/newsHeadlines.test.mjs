@@ -49,7 +49,7 @@ test('supports Atom feeds and only accepts the chosen publisher in Google News f
   assert.throws(() => parseNewsFeed(google, 'abc', { now }))
 })
 
-test('official feeds precede Google fallback; errors, obsolete feeds and timeouts fall back', async () => {
+test('independent official and aggregate feeds race without waiting for blocked origins', async () => {
   const calls = []
   const service = createNewsService({ now: () => now, fetchImpl: async url => {
     calls.push(url)
@@ -57,7 +57,7 @@ test('official feeds precede Google fallback; errors, obsolete feeds and timeout
     return response(feed(item({ link: 'https://www.foxnews.com/story' })))
   } })
   assert.equal((await service('fox')).source, 'Fox News')
-  assert.equal(calls.length, 2)
+  assert.equal(calls.length, 4)
   assert.ok(calls[0].includes('moxie.foxnews.com'))
   let calls2 = 0
   const fallback = createNewsService({ now: () => now, timeoutMs: 5, fetchImpl: async (url, { signal }) => {
@@ -66,7 +66,7 @@ test('official feeds precede Google fallback; errors, obsolete feeds and timeout
     return response(feed(item({ link: 'https://news.google.com/rss/articles/abc', source: 'ABC' }).replace('<source>ABC</source>', '<source url="https://abcnews.go.com">ABC</source>')))
   } })
   assert.equal((await fallback('abc')).aggregated, true)
-  assert.equal(calls2, 2)
+  assert.equal(calls2, 3)
 })
 
 test('deduplicates concurrent requests, caches successes, returns marked stale data and expires it', async () => {
@@ -79,23 +79,23 @@ test('deduplicates concurrent requests, caches successes, returns marked stale d
     return response(feed(item()))
   } })
   const results = await Promise.all([service('abc'), service('abc'), service('abc')])
-  assert.equal(calls, 1)
+  assert.equal(calls, 3)
   assert.equal(results[0].stale, false)
   await service('abc')
-  assert.equal(calls, 1)
+  assert.equal(calls, 3)
   clock += 11
   fail = true
   const stale = await service('abc')
   assert.equal(stale.stale, true)
   assert.equal(stale.fetchedAt, results[0].fetchedAt)
-  assert.equal(calls, 3)
+  assert.equal(calls, 6)
   await service('abc')
-  assert.equal(calls, 3)
+  assert.equal(calls, 6)
   clock += 100
   await assert.rejects(service('abc'), /unavailable/)
-  assert.equal(calls, 5)
+  assert.equal(calls, 9)
   await assert.rejects(service('abc'), /unavailable/)
-  assert.equal(calls, 5)
+  assert.equal(calls, 9)
 })
 
 test('provider allowlist rejects arbitrary URLs and prototype keys before any network request', async () => {
@@ -104,4 +104,38 @@ test('provider allowlist rejects arbitrary URLs and prototype keys before any ne
     assert.equal(isNewsProvider(provider), false)
     await assert.rejects(service(provider), /Unknown/)
   }
+})
+
+test('Bing redirect headlines resolve to the correct publisher and reject other publishers', () => {
+  const bing = url => feed(item({ link: `https://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;url=${encodeURIComponent(url)}` }))
+  const result = parseNewsFeed(bing('https://abcnews.go.com/story?id=456'), 'abc', { now, aggregated: true, aggregator: 'bing' })
+  assert.equal(result.link, 'https://abcnews.go.com/story?id=456')
+  assert.equal(result.aggregator, 'bing')
+  assert.throws(() => parseNewsFeed(bing('https://www.foxnews.com/story'), 'abc', { now, aggregated: true, aggregator: 'bing' }))
+  assert.throws(() => parseNewsFeed(bing('javascript:alert(1)'), 'abc', { now, aggregated: true, aggregator: 'bing' }))
+})
+
+test('a Bing headline succeeds even when official and Google feeds both fail', async () => {
+  const service = createNewsService({ now: () => now, fetchImpl: async url => {
+    if (!url.includes('www.bing.com/')) throw new Error('blocked')
+    return response(feed(item({ link: `https://www.bing.com/news/apiclick.aspx?url=${encodeURIComponent('https://abcnews.go.com/story')}` })))
+  } })
+  const result = await service('abc')
+  assert.equal(result.aggregator, 'bing')
+  assert.equal(result.link, 'https://abcnews.go.com/story')
+})
+
+test('a fast backup returns before a slow origin times out and aborts the loser', async () => {
+  let officialSignal
+  const service = createNewsService({ now: () => now, timeoutMs: 10_000, fetchImpl: async (url, { signal }) => {
+    if (url.includes('abcnews.go.com/')) {
+      officialSignal = signal
+      return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }))
+    }
+    if (url.includes('news.google.com/')) throw new Error('blocked')
+    return response(feed(item({ link: 'https://abcnews.go.com/story' })))
+  } })
+  const result = await service('abc')
+  assert.equal(result.aggregator, 'bing')
+  assert.equal(officialSignal.aborted, true)
 })

@@ -1,27 +1,29 @@
 <template>
   <section class="news-card" :class="`${provider}-news-card`">
     <header><h3>{{ source.icon }} {{ source.name }} 焦點頭條</h3></header>
-    <div v-if="isLoading" class="status" role="status">⏳ 正在取得 {{ source.name }} 最新頭條…</div>
+    <div v-if="isLoading && !newsData" class="status" role="status">⏳ 正在取得 {{ source.name }} 最新頭條…</div>
     <div v-else-if="!newsData" class="status" role="status">
       暫時無法取得新聞，請稍後重試。
       <button type="button" @click="fetchNews">重新載入</button>
       <a :href="source.home" target="_blank" rel="noopener noreferrer">前往 {{ source.name }}</a>
     </div>
     <div v-else class="news-layout-wrapper">
-      <p v-if="newsData.stale" class="notice" role="status">目前顯示上次成功取得的新聞，更新暫時延遲。</p>
+      <p v-if="newsData.stale" class="notice" role="status">{{ isLoading ? '正在更新，先顯示上次成功取得的新聞。' : '目前顯示上次成功取得的新聞，更新暫時延遲。' }}</p>
       <a :href="newsData.link" target="_blank" rel="noopener noreferrer" class="news-link" :title="`前往 ${source.name} 閱讀新聞`">
         <div v-if="newsData.image && !imageFailed" class="news-image-wrapper">
           <img :src="newsData.image" :alt="newsData.title" class="news-image" loading="lazy" @error="imageFailed = true" />
         </div>
         <div class="news-title-box"><p class="news-title">{{ newsData.title }}</p></div>
       </a>
-      <p v-if="newsData.aggregated" class="notice">{{ source.name }} 新聞（Google 新聞彙整）</p>
+      <p v-if="newsData.aggregated" class="notice">{{ source.name }} 新聞（{{ newsData.aggregator === 'bing' ? 'Bing' : 'Google' }} 新聞彙整）</p>
+      <button v-if="newsData.stale" type="button" :disabled="isLoading" @click="fetchNews">{{ isLoading ? '更新中…' : '重新載入' }}</button>
     </div>
   </section>
 </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { readNewsHeadline, writeNewsHeadline, validNewsHeadline } from '../../app/utils/newsHeadlineCache.js'
 const props = defineProps({ provider: { type: String, required: true } })
 const source = {
   abc: { name: 'ABC News', icon: '⬛', home: 'https://abcnews.go.com/' },
@@ -36,19 +38,25 @@ const fetchNews = async () => {
   controller?.abort()
   controller = new AbortController()
   const request = controller
-  const timeout = setTimeout(() => request.abort(), 20_000)
+  const timeout = setTimeout(() => request.abort(), 10_000)
   isLoading.value = true
   try {
     const response = await fetch(`/api/news/${props.provider}`, { signal: request.signal })
     if (!response.ok) throw new Error('News request failed')
     const data = await response.json()
-    if (!data.title || !data.link) throw new Error('No headline')
+    if (!validNewsHeadline(data, props.provider)) throw new Error('No headline')
     newsData.value = data
     imageFailed.value = false
-  } catch { newsData.value = null }
+    try { writeNewsHeadline(localStorage, props.provider, data) } catch {}
+  } catch {
+    if (newsData.value) newsData.value = { ...newsData.value, stale: true }
+  }
   finally { clearTimeout(timeout); isLoading.value = false }
 }
-onMounted(fetchNews)
+onMounted(() => {
+  try { newsData.value = readNewsHeadline(localStorage, props.provider) } catch {}
+  void fetchNews()
+})
 onBeforeUnmount(() => controller?.abort())
 </script>
 
