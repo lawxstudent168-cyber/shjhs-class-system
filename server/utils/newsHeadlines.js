@@ -62,6 +62,9 @@ export function createNewsService({ fetchImpl = globalThis.fetch, now = Date.now
     }, {
       url: `https://www.bing.com/news/search?${new URLSearchParams({ q: `site:${source.host}`, format: 'rss' })}`, aggregated: true, aggregator: 'bing'
     }]
+    if (provider === 'abc') feeds.push({
+      url: `https://news.google.com/rss/search?${new URLSearchParams({ q: '"ABC News" when:7d', hl: 'en-US', gl: 'US', ceid: 'US:en' })}`, aggregated: true, aggregator: 'google'
+    })
     const controllers = []
     const failures = []
     try {

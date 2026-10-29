@@ -66,7 +66,7 @@ test('independent official and aggregate feeds race without waiting for blocked 
     return response(feed(item({ link: 'https://news.google.com/rss/articles/abc', source: 'ABC' }).replace('<source>ABC</source>', '<source url="https://abcnews.go.com">ABC</source>')))
   } })
   assert.equal((await fallback('abc')).aggregated, true)
-  assert.equal(calls2, 3)
+  assert.equal(calls2, 4)
 })
 
 test('deduplicates concurrent requests, caches successes, returns marked stale data and expires it', async () => {
@@ -79,23 +79,23 @@ test('deduplicates concurrent requests, caches successes, returns marked stale d
     return response(feed(item()))
   } })
   const results = await Promise.all([service('abc'), service('abc'), service('abc')])
-  assert.equal(calls, 3)
+  assert.equal(calls, 4)
   assert.equal(results[0].stale, false)
   await service('abc')
-  assert.equal(calls, 3)
+  assert.equal(calls, 4)
   clock += 11
   fail = true
   const stale = await service('abc')
   assert.equal(stale.stale, true)
   assert.equal(stale.fetchedAt, results[0].fetchedAt)
-  assert.equal(calls, 6)
+  assert.equal(calls, 8)
   await service('abc')
-  assert.equal(calls, 6)
+  assert.equal(calls, 8)
   clock += 100
   await assert.rejects(service('abc'), /unavailable/)
-  assert.equal(calls, 9)
+  assert.equal(calls, 12)
   await assert.rejects(service('abc'), /unavailable/)
-  assert.equal(calls, 9)
+  assert.equal(calls, 12)
 })
 
 test('provider allowlist rejects arbitrary URLs and prototype keys before any network request', async () => {
@@ -148,4 +148,12 @@ test('ABC homepage and generic site titles are skipped in favor of a real articl
   assert.equal(parseNewsFeed(feed(generic, homepage, article), 'abc', { now }).title, 'A new report from Washington')
   const google = feed(item({ title: '- ABC News - Breaking News, Latest News and Videos', link: 'https://news.google.com/rss/articles/abc', source: 'ABC' }).replace('<source>ABC</source>', '<source url="https://abcnews.go.com">ABC</source>'), item({ title: 'Actual ABC report', link: 'https://news.google.com/rss/articles/def', source: 'ABC' }).replace('<source>ABC</source>', '<source url="https://abcnews.go.com">ABC</source>'))
   assert.equal(parseNewsFeed(google, 'abc', { now, aggregated: true }).title, 'Actual ABC report')
+})
+
+test('ABC name search can supply a real article when other feeds fail', async () => {
+  const service = createNewsService({ now: () => now, fetchImpl: async url => {
+    if (!url.includes('news.google.com') || !new URL(url).searchParams.get('q').includes('"ABC News"')) throw new Error('unavailable')
+    return response(feed(item({ title: 'A real ABC News report', link: 'https://news.google.com/rss/articles/report', source: 'ABC' }).replace('<source>ABC</source>', '<source url="https://abcnews.go.com">ABC</source>')))
+  } })
+  assert.equal((await service('abc')).title, 'A real ABC News report')
 })
