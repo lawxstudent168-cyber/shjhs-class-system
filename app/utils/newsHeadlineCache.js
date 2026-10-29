@@ -1,9 +1,11 @@
+export const isGenericAbcTitle = title => /^[-–—\s]*(?:abc news\s*[-–—|:]\s*)?(?:breaking news,?\s*latest news and videos|abc news)(?:\s*[-–—|:]\s*abc news)?\s*$/i.test(title.trim())
 const hosts = { abc: 'abcnews.go.com', fox: 'foxnews.com', cnn: 'cnn.com' }
 const maxAge = 24 * 3600_000
 const key = provider => `class-news-headline-v1:${provider}`
 
 export function validNewsHeadline(value, provider) {
   if (!Object.hasOwn(hosts, provider) || typeof value?.title !== 'string' || !value.title.trim() || value.title.length > 1000) return false
+  if (provider === 'abc' && isGenericAbcTitle(value.title)) return false
   try {
     const url = new URL(value.link)
     if (url.protocol !== 'https:' || url.username || url.password) return false

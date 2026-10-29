@@ -1,3 +1,4 @@
+import { isGenericAbcTitle } from '../../app/utils/newsHeadlineCache.js'
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
 
 const sources = {
@@ -34,7 +35,8 @@ export function parseNewsFeed(xml, provider, { aggregated = false, aggregator = 
       const redirect = new URL(link)
       if (onHost(redirect, 'bing.com')) link = safeUrl(redirect.searchParams.get('url'))
     }
-    if (!title || !link || title.length > 1000) continue
+    if (!title || !link || title.length > 1000 || (provider === 'abc' && isGenericAbcTitle(title))) continue
+    if (!(aggregated && aggregator === 'google') && new URL(link).pathname === '/') continue
     if (aggregated && aggregator === 'google') {
       const publisher = safeUrl(item.source?.['@_url'])
       if (!publisher || !onHost(new URL(publisher), source.host) || new URL(link).hostname !== 'news.google.com') continue

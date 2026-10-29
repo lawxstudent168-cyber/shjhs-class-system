@@ -139,3 +139,13 @@ test('a fast backup returns before a slow origin times out and aborts the loser'
   assert.equal(result.aggregator, 'bing')
   assert.equal(officialSignal.aborted, true)
 })
+
+
+test('ABC homepage and generic site titles are skipped in favor of a real article', () => {
+  const generic = item({ title: '- ABC News - Breaking News, Latest News and Videos', link: 'https://abcnews.go.com/' })
+  const homepage = item({ title: 'ABC News homepage', link: 'https://abcnews.go.com/' })
+  const article = item({ title: 'A new report from Washington', link: 'https://abcnews.go.com/Politics/story?id=123' })
+  assert.equal(parseNewsFeed(feed(generic, homepage, article), 'abc', { now }).title, 'A new report from Washington')
+  const google = feed(item({ title: '- ABC News - Breaking News, Latest News and Videos', link: 'https://news.google.com/rss/articles/abc', source: 'ABC' }).replace('<source>ABC</source>', '<source url="https://abcnews.go.com">ABC</source>'), item({ title: 'Actual ABC report', link: 'https://news.google.com/rss/articles/def', source: 'ABC' }).replace('<source>ABC</source>', '<source url="https://abcnews.go.com">ABC</source>'))
+  assert.equal(parseNewsFeed(google, 'abc', { now, aggregated: true }).title, 'Actual ABC report')
+})
