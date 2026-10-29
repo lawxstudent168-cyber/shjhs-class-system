@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createNewsService, parseNewsFeed, isNewsProvider } from '../server/utils/newsHeadlines.js'
+import { createNewsService, parseNewsFeed, parseNewsJson, isNewsProvider } from '../server/utils/newsHeadlines.js'
 
 const now = Date.parse('2026-10-28T02:00:00Z')
 const date = new Date(now).toUTCString()
@@ -10,6 +10,7 @@ const item = (overrides = {}) => {
 }
 const feed = (...items) => `<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel>${items.join('')}</channel></rss>`
 const response = body => ({ ok: true, text: async () => body })
+const jsonResponse = body => ({ ok: true, json: async () => body })
 
 test('parses official ABC, Fox and CNN RSS, CDATA, media and enclosure images', () => {
   const abc = parseNewsFeed(feed(item({ 'media:group': '<media:content url="https://images.example.com/news.jpg" type="image/jpeg" />' })), 'abc', { now })
@@ -66,7 +67,7 @@ test('independent official and aggregate feeds race without waiting for blocked 
     return response(feed(item({ link: 'https://news.google.com/rss/articles/abc', source: 'ABC' }).replace('<source>ABC</source>', '<source url="https://abcnews.go.com">ABC</source>')))
   } })
   assert.equal((await fallback('abc')).aggregated, true)
-  assert.equal(calls2, 4)
+  assert.equal(calls2, 11)
 })
 
 test('deduplicates concurrent requests, caches successes, returns marked stale data and expires it', async () => {
@@ -79,23 +80,23 @@ test('deduplicates concurrent requests, caches successes, returns marked stale d
     return response(feed(item()))
   } })
   const results = await Promise.all([service('abc'), service('abc'), service('abc')])
-  assert.equal(calls, 4)
+  assert.equal(calls, 11)
   assert.equal(results[0].stale, false)
   await service('abc')
-  assert.equal(calls, 4)
+  assert.equal(calls, 11)
   clock += 11
   fail = true
   const stale = await service('abc')
   assert.equal(stale.stale, true)
   assert.equal(stale.fetchedAt, results[0].fetchedAt)
-  assert.equal(calls, 8)
+  assert.equal(calls, 22)
   await service('abc')
-  assert.equal(calls, 8)
+  assert.equal(calls, 22)
   clock += 100
   await assert.rejects(service('abc'), /unavailable/)
-  assert.equal(calls, 12)
+  assert.equal(calls, 33)
   await assert.rejects(service('abc'), /unavailable/)
-  assert.equal(calls, 12)
+  assert.equal(calls, 33)
 })
 
 test('provider allowlist rejects arbitrary URLs and prototype keys before any network request', async () => {
@@ -150,10 +151,38 @@ test('ABC homepage and generic site titles are skipped in favor of a real articl
   assert.equal(parseNewsFeed(google, 'abc', { now, aggregated: true }).title, 'Actual ABC report')
 })
 
+test('ABC Google headlines accept a verified publisher name and remove the publisher suffix', () => {
+  const google = feed(item({
+    title: 'Senate advances education bill - ABC News',
+    link: 'https://news.google.com/rss/articles/report',
+    source: 'ABC News'
+  }))
+  const result = parseNewsFeed(google, 'abc', { now, aggregated: true })
+  assert.equal(result.title, 'Senate advances education bill')
+  assert.equal(result.link, 'https://news.google.com/rss/articles/report')
+})
+
 test('ABC name search can supply a real article when other feeds fail', async () => {
   const service = createNewsService({ now: () => now, fetchImpl: async url => {
     if (!url.includes('news.google.com') || !new URL(url).searchParams.get('q').includes('"ABC News"')) throw new Error('unavailable')
     return response(feed(item({ title: 'A real ABC News report', link: 'https://news.google.com/rss/articles/report', source: 'ABC' }).replace('<source>ABC</source>', '<source url="https://abcnews.go.com">ABC</source>')))
   } })
   assert.equal((await service('abc')).title, 'A real ABC News report')
+})
+
+test('ABC RSS JSON fallback keeps real articles and rejects generic or foreign entries', async () => {
+  const value = { status: 'ok', items: [
+    { title: 'ABC News', link: 'https://abcnews.go.com/' },
+    { title: 'Foreign article', link: 'https://example.com/story' },
+    { title: 'Schools announce a new program - ABC News', link: 'https://abcnews.go.com/US/story?id=42', pubDate: date }
+  ] }
+  const parsed = parseNewsJson(value, 'abc', { now })
+  assert.equal(parsed.title, 'Schools announce a new program')
+  assert.equal(parsed.link, 'https://abcnews.go.com/US/story?id=42')
+
+  const service = createNewsService({ now: () => now, fetchImpl: async url => {
+    if (!url.includes('api.rss2json.com')) throw new Error('unavailable')
+    return jsonResponse(value)
+  } })
+  assert.equal((await service('abc')).aggregator, 'rss2json')
 })

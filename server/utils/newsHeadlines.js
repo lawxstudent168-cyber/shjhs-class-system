@@ -2,7 +2,20 @@ import { isGenericAbcTitle } from '../../app/utils/newsHeadlineCache.js'
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
 
 const sources = {
-  abc: { name: 'ABC News', home: 'https://abcnews.go.com/', host: 'abcnews.go.com', feeds: ['https://abcnews.go.com/abcnews/topstories'] },
+  abc: {
+    name: 'ABC News',
+    home: 'https://abcnews.go.com/',
+    host: 'abcnews.go.com',
+    feeds: [
+      'https://abcnews.go.com/abcnews/topstories',
+      'https://abcnews.go.com/abcnews/usheadlines',
+      'https://abcnews.go.com/abcnews/internationalheadlines',
+      'https://abcnews.go.com/abcnews/politicsheadlines',
+      'https://abcnews.go.com/abcnews/businessheadlines',
+      'https://abcnews.go.com/abcnews/healthheadlines',
+      'https://abcnews.go.com/abcnews/technologyheadlines'
+    ]
+  },
   fox: { name: 'Fox News', home: 'https://www.foxnews.com/', host: 'foxnews.com', feeds: ['https://moxie.foxnews.com/google-publisher/latest.xml', 'https://feeds.foxnews.com/foxnews/latest'] },
   cnn: { name: 'CNN', home: 'https://edition.cnn.com/', host: 'cnn.com', feeds: ['https://rss.cnn.com/rss/edition.rss'] }
 }
@@ -11,6 +24,7 @@ const text = value => String(typeof value === 'object' && value ? value['#text']
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false, trimValues: true })
 export const isNewsProvider = provider => Object.hasOwn(sources, provider)
 const onHost = (url, host) => url.hostname === host || url.hostname.endsWith(`.${host}`)
+const cleanTitle = (title, provider) => provider === 'abc' ? title.replace(/\s+[-–—|]\s+ABC News\s*$/i, '').trim() : title
 const safeUrl = (value, base) => {
   try {
     if (!text(value)) return ''
@@ -28,7 +42,7 @@ export function parseNewsFeed(xml, provider, { aggregated = false, aggregator = 
   const document = parser.parse(xml)
   const items = list(document.rss?.channel?.item || document.feed?.entry)
   for (const item of items) {
-    const title = text(item.title)
+    const title = cleanTitle(text(item.title), provider)
     const rawLink = list(item.link).find(link => typeof link === 'string' || !link['@_rel'] || link['@_rel'] === 'alternate')
     let link = safeUrl(rawLink?.['@_href'] || rawLink, source.home)
     if (aggregated && aggregator === 'bing' && link) {
@@ -39,7 +53,9 @@ export function parseNewsFeed(xml, provider, { aggregated = false, aggregator = 
     if (!(aggregated && aggregator === 'google') && new URL(link).pathname === '/') continue
     if (aggregated && aggregator === 'google') {
       const publisher = safeUrl(item.source?.['@_url'])
-      if (!publisher || !onHost(new URL(publisher), source.host) || new URL(link).hostname !== 'news.google.com') continue
+      const publisherName = text(item.source)
+      const publisherMatches = publisher ? onHost(new URL(publisher), source.host) : publisherName.toLowerCase() === source.name.toLowerCase()
+      if (!publisherMatches || new URL(link).hostname !== 'news.google.com') continue
     } else if (!onHost(new URL(link), source.host)) continue
     const date = Date.parse(text(item.pubDate || item.published || item.updated))
     // Some retired feeds still return 200 with years-old headlines.
@@ -49,6 +65,23 @@ export function parseNewsFeed(xml, provider, { aggregated = false, aggregator = 
     return { title, link, image, publishedAt: Number.isFinite(date) ? new Date(date).toISOString() : null, source: source.name, aggregated, aggregator: aggregated ? aggregator : null }
   }
   throw new Error('No recent headlines in feed')
+}
+
+export function parseNewsJson(value, provider, { now = Date.now() } = {}) {
+  if (!isNewsProvider(provider) || value?.status !== 'ok' || !Array.isArray(value.items)) throw new Error('Invalid news JSON')
+  const source = sources[provider]
+  for (const item of value.items) {
+    const title = cleanTitle(text(item.title), provider)
+    const link = safeUrl(item.link, source.home)
+    if (!title || !link || title.length > 1000 || (provider === 'abc' && isGenericAbcTitle(title))) continue
+    const url = new URL(link)
+    if (!onHost(url, source.host) || url.pathname === '/') continue
+    const date = Date.parse(text(item.pubDate))
+    if (Number.isFinite(date) && (date < now - 7 * 86400_000 || date > now + 86400_000)) continue
+    const image = safeUrl(item.thumbnail || item.enclosure?.link, source.home)
+    return { title, link, image, publishedAt: Number.isFinite(date) ? new Date(date).toISOString() : null, source: source.name, aggregated: false, aggregator: 'rss2json' }
+  }
+  throw new Error('No recent headlines in news JSON')
 }
 
 export function createNewsService({ fetchImpl = globalThis.fetch, now = Date.now, freshMs = 5 * 60_000, staleMs = 24 * 3600_000, retryMs = 60_000, timeoutMs = 4500, onFailure = () => {} } = {}) {
@@ -64,6 +97,8 @@ export function createNewsService({ fetchImpl = globalThis.fetch, now = Date.now
     }]
     if (provider === 'abc') feeds.push({
       url: `https://news.google.com/rss/search?${new URLSearchParams({ q: '"ABC News" when:7d', hl: 'en-US', gl: 'US', ceid: 'US:en' })}`, aggregated: true, aggregator: 'google'
+    }, {
+      url: `https://api.rss2json.com/v1/api.json?${new URLSearchParams({ rss_url: source.feeds[0] })}`, format: 'json'
     })
     const controllers = []
     const failures = []
@@ -76,6 +111,7 @@ export function createNewsService({ fetchImpl = globalThis.fetch, now = Date.now
         try {
           const response = await fetchImpl(feed.url, { signal: controller.signal, headers: { Accept: 'application/rss+xml, application/xml, text/xml', 'User-Agent': 'ClassSystemNews/1.0' } })
           if (!response.ok) throw new Error(`Feed HTTP ${response.status}`)
+          if (feed.format === 'json') return parseNewsJson(await response.json(), provider, { now: now() })
           return parseNewsFeed(await response.text(), provider, { aggregated: feed.aggregated, aggregator: feed.aggregator, now: now() })
         } catch (error) {
           failures.push({ host: new URL(feed.url).hostname, reason: String(error.message).slice(0, 160) })
