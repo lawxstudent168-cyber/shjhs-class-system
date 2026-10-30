@@ -16,30 +16,30 @@
         </div>
       </div>
       
-      <p class="help-text">每筆事項可選日期並輸入內容。首頁只顯示今天起 7 天內的事項；到日期的隔天會自動消失。更遠的未來事項可先儲存排程。</p>
+      <p class="help-text">日期可留空：留空的事項會永久顯示在首頁；有日期的事項只會在今天起 7 天內顯示，並於日期隔天自動消失。</p>
 
       <div v-if="isLoading" class="loading-state">⏳ 載入資料中，請稍候...</div>
       
       <div v-else class="edit-mode">
-        <div v-if="!editItems.some(item => item.date >= todayISO)" class="empty-state">
-          目前沒有今天或未來的注意事項。
+        <div v-if="!editItems.some(isCurrentNote)" class="empty-state">
+          目前沒有長期、今天或未來的注意事項。
         </div>
 
-        <div v-for="(item, index) in editItems" v-show="showPast || item.date >= todayISO" :key="'cn-'+index" class="edit-row">
+        <div v-for="(item, index) in editItems" v-show="showPast || isCurrentNote(item)" :key="'cn-'+index" class="edit-row">
           <span class="row-num">{{ index + 1 }}.</span>
-          <label class="date-field"><span>事項日期</span><input v-model="item.date" type="date" class="date-picker" /></label>
+          <label class="date-field"><span>事項日期（留空＝永久）</span><input v-model="item.date" type="date" class="date-picker" /></label>
           <span class="weekday-hint">{{ classNoteDateLabel(item.date) }}</span>
           <input v-model="item.content" type="text" placeholder="輸入班級注意事項..." class="edit-input"/>
           <button @click="removeItem(index)" class="del-row-btn">🗑️ 刪除</button>
         </div>
-        <button v-if="editItems.some(item => item.date < todayISO)" type="button" class="history-toggle" @click="showPast = !showPast">
+        <button v-if="editItems.some(isPastNote)" type="button" class="history-toggle" @click="showPast = !showPast">
           {{ showPast ? '收起歷史事項' : '查看及編輯歷史事項' }}
         </button>
         
         <div class="edit-actions">
           <button @click="addItem" class="add-btn">➕ 新增一筆事項</button>
           <div class="right-actions">
-            <button v-if="editItems.some(item => item.date >= todayISO)" @click="clearUpcoming" class="clear-btn">🧹 清空今天及未來事項</button>
+            <button v-if="editItems.some(isCurrentNote)" @click="clearUpcoming" class="clear-btn">🧹 清空長期、今天及未來事項</button>
             <button @click="saveItems" class="save-btn" :disabled="isSaving">
               {{ isSaving ? '儲存中...' : '💾 儲存並發布' }}
             </button>
@@ -63,6 +63,8 @@ const isSaving = ref(false)
 const editItems = ref([])
 const allNotesData = ref([])
 const showPast = ref(false)
+const isCurrentNote = item => !item.date || item.date >= todayISO
+const isPastNote = item => Boolean(item.date) && item.date < todayISO
 
 const fetchNotes = async () => {
   isLoading.value = true
@@ -80,18 +82,18 @@ const fetchNotes = async () => {
 
 onMounted(() => fetchNotes())
 
-const addItem = () => editItems.value.push({ date: todayISO, content: '' })
+const addItem = () => editItems.value.push({ date: '', content: '' })
 const removeItem = (idx) => editItems.value.splice(idx, 1)
 
 const clearUpcoming = () => {
-  if (confirm('確定要清空今天及未來的所有注意事項嗎？歷史事項會保留。')) {
-    editItems.value = editItems.value.filter(item => item.date < todayISO)
+  if (confirm('確定要清空長期、今天及未來的所有注意事項嗎？歷史事項會保留。')) {
+    editItems.value = editItems.value.filter(isPastNote)
   }
 }
 
 const saveItems = async () => {
-  if (editItems.value.some(item => item.content.trim() && !isValidExamDate(item.date))) {
-    alert('請為每筆事項選擇有效日期。')
+  if (editItems.value.some(item => item.content.trim() && item.date && !isValidExamDate(item.date))) {
+    alert('日期請留空（永久顯示）或選擇有效日期。')
     return
   }
   isSaving.value = true
@@ -104,7 +106,7 @@ const saveItems = async () => {
     if (error) throw error
     allNotesData.value = cleanedItems
     editItems.value = cleanedItems.map(item => ({ ...item }))
-    alert('✅ 班級注意事項已儲存；首頁會依日期自動顯示。')
+    alert('✅ 班級注意事項已儲存；無日期事項會永久顯示。')
   } catch (err) {
     alert('❌ 儲存失敗：' + err.message)
   } finally {
@@ -133,9 +135,9 @@ const importJSON = async (event) => {
     try {
       const imported = JSON.parse(e.target.result)
       const validNew = Array.isArray(imported) && imported.every(item =>
-        item && isValidExamDate(item.date) && typeof item.content === 'string')
+        item && (!item.date || isValidExamDate(item.date)) && typeof item.content === 'string')
       const validLegacy = imported && typeof imported === 'object' && !Array.isArray(imported) &&
-        Object.entries(imported).every(([date, items]) => isValidExamDate(date) &&
+        Object.entries(imported).every(([date, items]) => (!date || isValidExamDate(date)) &&
           Array.isArray(items) && items.every(item => typeof item === 'string'))
       if (!validNew && !validLegacy) {
         throw new Error('無效的資料格式；請匯入新版陣列或舊版日期鍵值物件。')

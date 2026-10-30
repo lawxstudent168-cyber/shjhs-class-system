@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { classNoteDateLabel, normalizeClassNotes, weeklyClassNotes } from '../app/utils/classNotes.js'
 
 test('existing date-keyed notes migrate without losing their dates or history', () => {
@@ -30,4 +31,33 @@ test('the homepage shows today through six days ahead and drops each note the ne
 test('seven-day window crosses month and year boundaries', () => {
   const notes = [{ date: '2027-01-06', content: '六天後' }, { date: '2027-01-07', content: '七天後' }]
   assert.deepEqual(weeklyClassNotes(notes, Date.UTC(2026, 11, 30, 16)).map(item => item.content), ['六天後'])
+})
+
+test('notes without a date stay permanently on the homepage and sort first', () => {
+  const notes = [
+    { date: '2026-11-02', content: '下週事項' },
+    { date: '', content: '每天都要帶水壺' },
+    { content: '缺少日期欄位也視為長期事項' },
+    { date: 'not-a-date', content: '無效日期' }
+  ]
+  assert.deepEqual(normalizeClassNotes(notes), [
+    { date: '', content: '每天都要帶水壺' },
+    { date: '', content: '缺少日期欄位也視為長期事項' },
+    { date: '2026-11-02', content: '下週事項' }
+  ])
+  assert.deepEqual(weeklyClassNotes(notes, '2027-05-01').map(item => item.content), [
+    '每天都要帶水壺',
+    '缺少日期欄位也視為長期事項'
+  ])
+  assert.equal(classNoteDateLabel(''), '長期')
+})
+
+test('class notes UI supports blank dates and a native fullscreen control', () => {
+  const board = readFileSync(new URL('../components/home/ClassNotes.vue', import.meta.url), 'utf8')
+  const admin = readFileSync(new URL('../app/components/AdminClassNotes.vue', import.meta.url), 'utf8')
+  assert.match(board, /requestFullscreen\(\)/)
+  assert.match(board, /document\.exitFullscreen\(\)/)
+  assert.match(board, /日期留空時永久顯示/)
+  assert.match(admin, /事項日期（留空＝永久）/)
+  assert.match(admin, /\{ date: '', content: '' \}/)
 })

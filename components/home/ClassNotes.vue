@@ -1,5 +1,5 @@
 <template>
-  <div class="notes-board" data-track-feature="本週班級注意事項">
+  <div ref="notesBoard" class="notes-board" data-track-feature="本週班級注意事項">
     <!-- 💡 將原本的 header 改造為可點擊的摺疊開關群組 -->
     <div class="board-header">
       <div class="title-group" data-track-action="展開／收合本週班級注意事項" @click="toggleExpand" title="點擊展開/收合">
@@ -7,7 +7,13 @@
         <span class="toggle-icon">{{ isExpanded ? '▲' : '▼' }}</span>
         <p class="board-date">{{ todayDisplay }}</p>
       </div>
-      <button v-if="!isEditingClassNotes" @click.stop="$emit('open-pwd')" class="edit-btn">✏️ 編輯</button>
+      <div class="header-actions">
+        <button type="button" class="fullscreen-btn" :aria-label="isFullscreen ? '退出全螢幕' : '全螢幕顯示班級注意事項'"
+          :title="isFullscreen ? '退出全螢幕' : '全螢幕顯示'" @click.stop="toggleFullscreen">
+          {{ isFullscreen ? '✕' : '⛶' }}
+        </button>
+        <button v-if="!isEditingClassNotes" @click.stop="$emit('open-pwd')" class="edit-btn">✏️ 編輯</button>
+      </div>
     </div>
     
     <div class="dashed-divider"></div>
@@ -17,7 +23,7 @@
       <div class="board-content">
         
         <div v-if="!isEditingClassNotes">
-          <div v-if="classNoteItems.length === 0" class="empty-text-italic">未來 7 天尚無班級注意事項...</div>
+          <div v-if="classNoteItems.length === 0" class="empty-text-italic">目前尚無班級注意事項...</div>
           <ul v-else class="item-list notes-list">
             <li v-for="(item, index) in classNoteItems" :key="'cn-'+index">
               <span class="note-date">{{ classNoteDateLabel(item.date) }}</span>
@@ -30,7 +36,7 @@
           <div v-for="(item, index) in editingClassNoteItems" :key="'edit-note-'+index" class="edit-row">
             <span class="row-num">{{ index + 1 }}.</span>
             <input :value="item.date" :min="currentDate" @input="$emit('update-date', index, $event.target.value)"
-              type="date" class="edit-date" aria-label="事項日期" />
+              type="date" class="edit-date" aria-label="事項日期，可留空永久顯示" title="日期留空時永久顯示" />
             <input 
               :value="item.content"
               @input="$emit('update-item', index, $event.target.value)" 
@@ -55,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { classNoteDateLabel } from '~~/app/utils/classNotes.js'
 
 const props = defineProps({
@@ -70,6 +76,26 @@ const props = defineProps({
 defineEmits(['open-pwd', 'cancel-edit', 'save-items', 'add-item', 'remove-item', 'update-item', 'update-date'])
 
 const isExpanded = ref(false)
+const isFullscreen = ref(false)
+const notesBoard = ref(null)
+
+const syncFullscreen = () => {
+  isFullscreen.value = document.fullscreenElement === notesBoard.value
+  if (isFullscreen.value) isExpanded.value = true
+}
+
+const toggleFullscreen = async () => {
+  if (!notesBoard.value || typeof document === 'undefined') return
+  try {
+    if (document.fullscreenElement === notesBoard.value) await document.exitFullscreen()
+    else await notesBoard.value.requestFullscreen()
+  } catch (error) {
+    console.warn('無法切換班級注意事項全螢幕模式', error)
+  }
+}
+
+onMounted(() => document.addEventListener('fullscreenchange', syncFullscreen))
+onBeforeUnmount(() => document.removeEventListener('fullscreenchange', syncFullscreen))
 
 const toggleExpand = () => {
   isExpanded.value = !isExpanded.value
@@ -97,6 +123,9 @@ watch(() => props.isEditingClassNotes, (newVal) => {
 .notes-board { background-color: #1e293b; border: 10px solid #475569; border-radius: 8px; padding: 20px 25px; box-shadow: 0 6px 12px rgba(0,0,0,0.15), inset 0 0 10px rgba(0,0,0,0.3); margin-bottom: 20px;}
 
 .board-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.fullscreen-btn { width: 32px; height: 32px; padding: 0; border: 1px solid #64748b; border-radius: 6px; background: #334155; color: #cbd5e1; cursor: pointer; font-size: 1rem; line-height: 1; }
+.fullscreen-btn:hover { background: #475569; color: white; }
 
 /* 💡 新增：讓標題區域變成可點擊的視覺效果 */
 .title-group {
@@ -163,9 +192,18 @@ watch(() => props.isEditingClassNotes, (newVal) => {
 .cancel-btn { background: #64748b; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; }
 .save-btn { background: #10b981; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; }
 
+.notes-board:fullscreen { width: 100vw; height: 100vh; box-sizing: border-box; margin: 0; border-radius: 0; overflow: auto; padding: clamp(24px, 5vw, 72px); }
+.notes-board:fullscreen .board-title { font-size: clamp(2rem, 4vw, 4.5rem); }
+.notes-board:fullscreen .board-date { font-size: clamp(1rem, 2vw, 2rem); }
+.notes-board:fullscreen .collapsible-section.is-open { max-height: none; }
+.notes-board:fullscreen .notes-list { gap: clamp(18px, 3vh, 42px); }
+.notes-board:fullscreen .notes-list li { font-size: clamp(1.5rem, 3vw, 3.5rem); line-height: 1.35; }
+.notes-board:fullscreen .fullscreen-btn { position: fixed; top: 18px; right: 18px; z-index: 2; }
+
 @media (max-width: 768px) {
   .notes-board { padding: 15px 10px; border-width: 8px; }
   .board-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .header-actions { justify-content: flex-end; }
   .title-group { align-items: center; padding-right: 0; }
   .toggle-icon { position: static; margin-left: 10px; display: inline-block; }
   .notes-title { font-size: 1.3rem; }
