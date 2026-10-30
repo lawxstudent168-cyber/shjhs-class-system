@@ -25,8 +25,38 @@
         <input type="text" v-model="pwdConfig.custom_pwd" class="edit-input" placeholder="請輸入密碼..." />
       </div>
 
+      <div class="special-date-settings">
+        <h5>🗓️ 首頁「設定」按鈕的特別私訊日期</h5>
+        <p>只有選取的日期，首頁「設定」按鈕連按 7 次才會進入特別私訊；其他日期按鈕不會作用。</p>
+        <div class="calendar-toolbar">
+          <button type="button" @click="calendarMonth = shiftCalendarMonth(calendarMonth, -1)" aria-label="上個月">‹</button>
+          <strong>{{ calendarMonthLabel }}</strong>
+          <button type="button" @click="calendarMonth = shiftCalendarMonth(calendarMonth, 1)" aria-label="下個月">›</button>
+        </div>
+        <div class="calendar-grid weekday-grid">
+          <span v-for="weekday in weekdays" :key="weekday">{{ weekday }}</span>
+        </div>
+        <div class="calendar-grid date-grid">
+          <template v-for="(date, index) in calendarDays" :key="date || `blank-${index}`">
+            <span v-if="!date" class="calendar-blank"></span>
+            <button v-else type="button" :class="{ selected: specialMessageDates.includes(date), today: date === todayISO }"
+              :aria-pressed="specialMessageDates.includes(date)" @click="toggleSpecialMessageDate(date)">
+              {{ Number(date.slice(-2)) }}
+            </button>
+          </template>
+        </div>
+        <div class="selected-dates">
+          <strong>已選日期（{{ specialMessageDates.length }}）：</strong>
+          <span v-if="!specialMessageDates.length">尚未選取，按鈕每天都不會作用。</span>
+          <button v-for="date in specialMessageDates" :key="date" type="button" @click="toggleSpecialMessageDate(date)">
+            {{ date.replaceAll('-', '/') }} ×
+          </button>
+          <button v-if="specialMessageDates.length" type="button" class="clear-dates" @click="specialMessageDates = []">清除全部</button>
+        </div>
+      </div>
+
       <button @click="saveSettings" class="save-btn" :disabled="isSaving">
-        {{ isSaving ? '儲存中...' : '💾 儲存密碼設定' }}
+        {{ isSaving ? '儲存中...' : '💾 儲存密碼與日期設定' }}
       </button>
     </div>
 
@@ -184,10 +214,25 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { normalizeSpecialMessageDates, shiftCalendarMonth, specialMessageCalendarDays, taiwanCalendarDate } from '../utils/specialMessageSchedule.js'
 const supabase = useSupabaseClient()
 
 const pwdConfig = ref({ type: 'dynamic', custom_pwd: '' })
 const isSaving = ref(false)
+const todayISO = taiwanCalendarDate()
+const calendarMonth = ref(todayISO.slice(0, 7))
+const specialMessageDates = ref([])
+const weekdays = ['日', '一', '二', '三', '四', '五', '六']
+const calendarDays = computed(() => specialMessageCalendarDays(calendarMonth.value))
+const calendarMonthLabel = computed(() => {
+  const [year, month] = calendarMonth.value.split('-')
+  return `${year} 年 ${Number(month)} 月`
+})
+const toggleSpecialMessageDate = date => {
+  specialMessageDates.value = specialMessageDates.value.includes(date)
+    ? specialMessageDates.value.filter(item => item !== date)
+    : normalizeSpecialMessageDates([...specialMessageDates.value, date])
+}
 
 const clockConfig = ref({ theme: 'classic', color: '#1e293b', size: 35, dateSize: 18, showIcon: true })
 const isSavingClock = ref(false)
@@ -220,6 +265,9 @@ const currentDynamicPwd = computed(() => {
 const fetchConfig = async () => {
   const { data: pwdData } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'admin_password').maybeSingle()
   if (pwdData?.setting_value) pwdConfig.value = pwdData.setting_value
+
+  const { data: specialDateData } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'special_message_dates').maybeSingle()
+  specialMessageDates.value = normalizeSpecialMessageDates(specialDateData?.setting_value)
 
   const { data: clkData } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'index_clock_config').maybeSingle()
   if (clkData && clkData.setting_value) {
@@ -283,8 +331,12 @@ const moveModuleDown = (index) => {
 const saveSettings = async () => {
   if (pwdConfig.value.type === 'custom' && !pwdConfig.value.custom_pwd.trim()) return alert('❌ 請輸入您的自訂密碼！')
   isSaving.value = true
-  const { error } = await supabase.from('system_settings').upsert({ setting_key: 'admin_password', setting_value: pwdConfig.value }, { onConflict: 'setting_key' })
-  if (!error) alert('✅ 密碼設定已成功更新！')
+  const dates = normalizeSpecialMessageDates(specialMessageDates.value)
+  const { error } = await supabase.from('system_settings').upsert([
+    { setting_key: 'admin_password', setting_value: pwdConfig.value },
+    { setting_key: 'special_message_dates', setting_value: { dates } }
+  ], { onConflict: 'setting_key' })
+  if (!error) { specialMessageDates.value = dates; alert('✅ 密碼與特別私訊日期已成功更新！') }
   else alert('❌ 儲存失敗')
   isSaving.value = false
 }
@@ -326,6 +378,21 @@ const saveIndexModules = async () => {
 .radio-group label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .preview-tag { background: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 6px; font-size: 0.95rem; font-weight: bold; margin-left: 10px; }
 .custom-pwd-box { margin-left: 28px; padding: 15px; background: #f8fafc; border-left: 4px solid #3b82f6; border-radius: 4px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;}
+.special-date-settings { margin: 22px 0; max-width: 560px; padding: 18px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; }
+.special-date-settings h5 { margin: 0 0 8px; color: #334155; font-size: 1.05rem; }
+.special-date-settings > p { color: #64748b; line-height: 1.55; }
+.calendar-toolbar { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 10px; }
+.calendar-toolbar button { width: 38px; height: 34px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; font-size: 1.4rem; cursor: pointer; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.weekday-grid { margin-bottom: 5px; text-align: center; color: #64748b; font-size: .85rem; font-weight: bold; }
+.date-grid button { min-height: 38px; border: 1px solid #dbe3ec; border-radius: 6px; background: white; color: #334155; cursor: pointer; }
+.date-grid button:hover { border-color: #64748b; }
+.date-grid button.today { box-shadow: inset 0 0 0 2px #f59e0b; }
+.date-grid button.selected { border-color: #64748b; background: #64748b; color: white; font-weight: bold; }
+.calendar-blank { min-height: 38px; }
+.selected-dates { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 14px; color: #475569; font-size: .9rem; }
+.selected-dates button { padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 999px; background: white; color: #334155; cursor: pointer; }
+.selected-dates .clear-dates { color: #b91c1c; border-color: #fecaca; }
 
 .clock-settings-grid { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; padding: 15px; background: #f8fafc; border-left: 4px solid #10b981; border-radius: 4px;}
 .form-group { display: flex; flex-direction: column; gap: 8px; }

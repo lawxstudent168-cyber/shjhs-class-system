@@ -32,19 +32,23 @@ test('attachment session is signed and scoped without changing legacy passwords'
 })
 
 test('attachment login accepts the original student and parent verification methods', async () => {
+  const today = '2026-10-30'
+  const now = Date.parse('2026-10-30T04:00:00Z')
   const tables = {
     students: [{ id: 's1', birthday: '20130514', id_last_5: '12345', id_number: null }],
     parents: [{ student_id: 's1', email: 'abcde.parent@example.test' }],
-    parent_bindings: []
+    parent_bindings: [],
+    system_settings: [{ setting_key: 'special_message_dates', setting_value: { dates: [today] } }]
   }
   const db = { from: table => ({ select: () => ({ eq: (key, value) => ({
     maybeSingle: async () => ({ data: tables[table]?.find(row => String(row[key]) === String(value)) || null, error: null }),
     then: resolve => resolve({ data: tables[table]?.filter(row => String(row[key]) === String(value)) || [], error: null })
   }) }) }) }
   assert.deepEqual(await verifyMediaIdentity(db, { role: 'student', studentId: 's1', birthday: '20130514', idLast5: '12345' }), { role: 'student', studentId: 's1' })
-  assert.deepEqual(await verifyMediaIdentity(db, { role: 'student', authMethod: 'birthday-only', birthday: '20130514' }), { role: 'student', studentId: 's1' })
-  assert.equal(await verifyMediaIdentity(db, { role: 'student', authMethod: 'birthday-only', birthday: '2013051' }), null)
-  assert.equal(await verifyMediaIdentity(db, { role: 'student', authMethod: 'birthday-only', birthday: '20130515' }), null)
+  assert.deepEqual(await verifyMediaIdentity(db, { role: 'student', authMethod: 'birthday-only', birthday: '20130514' }, now), { role: 'student', studentId: 's1' })
+  assert.equal(await verifyMediaIdentity(db, { role: 'student', authMethod: 'birthday-only', birthday: '2013051' }, now), null)
+  assert.equal(await verifyMediaIdentity(db, { role: 'student', authMethod: 'birthday-only', birthday: '20130515' }, now), null)
+  assert.equal(await verifyMediaIdentity(db, { role: 'student', authMethod: 'birthday-only', birthday: '20130514' }, now + 86400_000), null)
   assert.deepEqual(await verifyMediaIdentity(db, { role: 'parent', studentId: 's1', authMethod: 'id', birthday: '20130514', idLast4: '2345' }), { role: 'parent', studentId: 's1' })
   assert.deepEqual(await verifyMediaIdentity(db, { role: 'parent', studentId: 's1', authMethod: 'email', emailPrefix: 'abcde' }), { role: 'parent', studentId: 's1' })
   assert.equal(await verifyMediaIdentity(db, { role: 'parent', studentId: 's1', authMethod: 'email', emailPrefix: 'wrong' }), null)

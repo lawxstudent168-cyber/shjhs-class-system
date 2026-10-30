@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createError, deleteCookie, getCookie, getHeader, getRequestURL, setCookie, setResponseHeader } from 'h3'
+import { isSpecialMessageDateEnabled } from '../../app/utils/specialMessageSchedule.js'
 
 const COOKIE = 'private_media_session'
 const SESSION_MS = 8 * 60 * 60 * 1000
@@ -76,6 +77,9 @@ export async function verifyMediaIdentity(db, body, now = Date.now()) {
   }
   if (body.role === 'student' && body.authMethod === 'birthday-only') {
     if (typeof body.birthday !== 'string' || !/^\d{8}$/.test(body.birthday)) return null
+    const { data: dateSetting, error: settingError } = await db.from('system_settings').select('setting_value')
+      .eq('setting_key', 'special_message_dates').maybeSingle()
+    if (settingError || !isSpecialMessageDateEnabled(dateSetting?.setting_value, now)) return null
     const { data: student, error } = await db.from('students').select('id').eq('birthday', body.birthday).maybeSingle()
     if (error || !student?.id) return null
     return { role: 'student', studentId: String(student.id) }

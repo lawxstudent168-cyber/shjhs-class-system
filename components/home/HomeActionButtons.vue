@@ -67,17 +67,27 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { advanceSpecialMessageGate } from '../../app/utils/specialMessageGate.js'
+import { isSpecialMessageDateEnabled, normalizeSpecialMessageDates } from '../../app/utils/specialMessageSchedule.js'
 
+const supabase = useSupabaseClient()
 const specialGate = ref({ count: 0, lastTap: 0 })
+const specialMessageDates = ref([])
+const loadSpecialMessageDates = async () => {
+  const { data, error } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'special_message_dates').maybeSingle()
+  specialMessageDates.value = error ? [] : normalizeSpecialMessageDates(data?.setting_value)
+}
 const openSpecialMessage = async () => {
   specialGate.value = advanceSpecialMessageGate(specialGate.value)
   if (specialGate.value.unlocked) {
+    await loadSpecialMessageDates()
+    if (!isSpecialMessageDateEnabled(specialMessageDates.value)) return
     sessionStorage.setItem('special_message_entry', String(Date.now()))
     await navigateTo('/special-message')
   }
 }
+onMounted(loadSpecialMessageDates)
 
 const props = defineProps({
   scheduleDisplay: Object,
@@ -114,7 +124,7 @@ defineEmits(['enterExam', 'openLargeSchedule', 'openPwd', 'update:showSeatingCha
 .btn-orange { background: #f59e0b; }
 .btn-green { background: #10b981; }
 .btn-blue { background: #3b82f6; }
-.btn-settings { background: #64748b; }
+.btn-settings { background: #94a3b8; }
 .btn-teal-light { background: #14b8a6; }
 .btn-lime { background: #84cc16; color: #14532d; border: 1px solid #65a30d;}
 .btn-dark { background: #64748b; }

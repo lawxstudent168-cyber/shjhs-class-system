@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
 import { createClient } from '@supabase/supabase-js'
+import { taiwanCalendarDate } from '../app/utils/specialMessageSchedule.js'
 
 test('student and teacher uploads stay in their private channel, with teacher editing and deletion', async t => {
   const rows = [], objects = new Map()
@@ -10,7 +11,10 @@ test('student and teacher uploads stay in their private channel, with teacher ed
     students: [{ id: 'child-a', birthday: '20130514', id_last_5: '12345', id_number: null }],
     parents: [{ student_id: 'child-a', email: 'parent@example.test' }],
     parent_bindings: [],
-    system_settings: [{ setting_key: 'admin_password', setting_value: { type: 'custom', custom_pwd: 'fixture-teacher-password' } }]
+    system_settings: [
+      { setting_key: 'admin_password', setting_value: { type: 'custom', custom_pwd: 'fixture-teacher-password' } },
+      { setting_key: 'special_message_dates', setting_value: { dates: [taiwanCalendarDate()] } }
+    ]
   }
   const media = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
