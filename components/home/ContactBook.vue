@@ -21,7 +21,7 @@
         <div v-if="contactBookItems.length === 0" class="empty-text-italic">目前尚無聯絡簿事項...</div>
         <ul v-else class="item-list contact-list">
           <li v-for="(item, index) in contactBookItems" :key="'c-'+index">
-            <span>{{ index + 1 }}. {{ privacyFilter(contactItemContent(item)) }}</span>
+            <span class="contact-text">{{ index + 1 }}. {{ privacyFilter(contactItemContent(item)) }}</span>
             <span v-if="contactItemDueDate(item)" class="due-date">繳交期限：{{ classNoteDateLabel(contactItemDueDate(item)) }}</span>
           </li>
         </ul>
@@ -100,8 +100,9 @@ defineEmits(['open-pwd', 'cancel-edit', 'save-items', 'add-item', 'remove-item',
 .board-content { color: white; min-height: 40px; }
 .empty-text-italic { color: #94a3b8; font-style: italic; font-size: 1.1rem; }
 .item-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
-.contact-list li { display: flex; flex-direction: column; gap: 3px; }
-.due-date { color: #fde68a; font-size: .9em; font-weight: bold; padding-left: 1.5em; }
+.contact-list li { display: flex; flex-direction: row; align-items: baseline; flex-wrap: wrap; column-gap: 12px; row-gap: 3px; }
+.contact-text { min-width: 0; }
+.due-date { color: #fde68a; font-size: .9em; font-weight: bold; white-space: nowrap; }
 
 .board-header { display: flex; justify-content: space-between; align-items: flex-start; }
 .header-actions { display: flex; align-items: center; gap: 8px; }

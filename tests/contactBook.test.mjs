@@ -50,6 +50,7 @@ test('contact book UI offers optional deadlines and fullscreen mode', () => {
   assert.match(board, /requestFullscreen\(\)/)
   assert.match(board, /繳交期限，可留空/)
   assert.match(board, /update-date/)
+  assert.match(board, /flex-direction: row/)
   assert.match(admin, /syncContactDeadlinesToClassNotes/)
   assert.match(homepage, /syncContactDeadlinesToClassNotes/)
 })

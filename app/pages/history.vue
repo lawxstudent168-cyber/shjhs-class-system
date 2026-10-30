@@ -329,7 +329,7 @@ const formatDisplayDate = (dateStr) => {
 .history-date { font-weight: bold; color: #be185d; font-size: 1.15rem; margin-bottom: 15px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 10px;}
 .item-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .item-list li { color: #334155; font-size: 1.1rem; line-height: 1.5; }
-.item-deadline { display: block; margin-left: 1.5em; color: #0369a1; font-size: .88em; font-weight: bold; }
+.item-deadline { display: inline-block; margin-left: 10px; color: #0369a1; font-size: .88em; font-weight: bold; white-space: nowrap; }
 
 @media (max-width: 768px) {
   .workspace-header { flex-direction: column; align-items: stretch; text-align: center; }

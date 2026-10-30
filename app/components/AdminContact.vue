@@ -340,7 +340,7 @@ const saveHistory = async () => {
 .history-section h6 { font-size: 1.05rem; color: #475569; margin: 0 0 10px 0; }
 .history-list { display: flex; flex-direction: column; gap: 8px; }
 .history-item { font-size: 1.05rem; color: #334155; line-height: 1.4; word-break: break-all; }
-.history-due { display: block; margin-left: 1.6em; color: #0369a1; font-size: .88em; font-weight: bold; }
+.history-due { display: inline-block; margin-left: 10px; color: #0369a1; font-size: .88em; font-weight: bold; white-space: nowrap; }
 .empty-text { color: #94a3b8; font-style: italic; }
 
 @media (max-width: 768px) {
