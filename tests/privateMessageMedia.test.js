@@ -42,6 +42,9 @@ test('attachment login accepts the original student and parent verification meth
     then: resolve => resolve({ data: tables[table]?.filter(row => String(row[key]) === String(value)) || [], error: null })
   }) }) }) }
   assert.deepEqual(await verifyMediaIdentity(db, { role: 'student', studentId: 's1', birthday: '20130514', idLast5: '12345' }), { role: 'student', studentId: 's1' })
+  assert.deepEqual(await verifyMediaIdentity(db, { role: 'student', authMethod: 'birthday-only', birthday: '20130514' }), { role: 'student', studentId: 's1' })
+  assert.equal(await verifyMediaIdentity(db, { role: 'student', authMethod: 'birthday-only', birthday: '2013051' }), null)
+  assert.equal(await verifyMediaIdentity(db, { role: 'student', authMethod: 'birthday-only', birthday: '20130515' }), null)
   assert.deepEqual(await verifyMediaIdentity(db, { role: 'parent', studentId: 's1', authMethod: 'id', birthday: '20130514', idLast4: '2345' }), { role: 'parent', studentId: 's1' })
   assert.deepEqual(await verifyMediaIdentity(db, { role: 'parent', studentId: 's1', authMethod: 'email', emailPrefix: 'abcde' }), { role: 'parent', studentId: 's1' })
   assert.equal(await verifyMediaIdentity(db, { role: 'parent', studentId: 's1', authMethod: 'email', emailPrefix: 'wrong' }), null)

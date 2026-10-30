@@ -27,6 +27,7 @@
       <NuxtLink v-if="indexButtonSettings.parentBind" to="/parent-bind" class="btn btn-orange">👨‍👩‍👧 綁定</NuxtLink>
       <NuxtLink v-if="indexButtonSettings.parentMsg" to="/parent-message" class="btn btn-green">💬 家長私訊</NuxtLink>
       <NuxtLink v-if="indexButtonSettings.studentMsg" to="/student-message" class="btn btn-blue">💬 學生私訊</NuxtLink>
+      <button type="button" class="btn btn-settings" @click="openSpecialMessage">設定</button>
       
       <NuxtLink v-if="indexButtonSettings.parentLeave" to="/leave-application" class="btn btn-teal-light">📝 家長代學生請假</NuxtLink>
       
@@ -66,6 +67,18 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+import { advanceSpecialMessageGate } from '../../app/utils/specialMessageGate.js'
+
+const specialGate = ref({ count: 0, lastTap: 0 })
+const openSpecialMessage = async () => {
+  specialGate.value = advanceSpecialMessageGate(specialGate.value)
+  if (specialGate.value.unlocked) {
+    sessionStorage.setItem('special_message_entry', String(Date.now()))
+    await navigateTo('/special-message')
+  }
+}
+
 const props = defineProps({
   scheduleDisplay: Object,
   scheduleButtonConfig: Object,
@@ -101,6 +114,7 @@ defineEmits(['enterExam', 'openLargeSchedule', 'openPwd', 'update:showSeatingCha
 .btn-orange { background: #f59e0b; }
 .btn-green { background: #10b981; }
 .btn-blue { background: #3b82f6; }
+.btn-settings { background: #64748b; }
 .btn-teal-light { background: #14b8a6; }
 .btn-lime { background: #84cc16; color: #14532d; border: 1px solid #65a30d;}
 .btn-dark { background: #64748b; }

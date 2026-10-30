@@ -94,8 +94,9 @@ test('student and teacher uploads stay in their private channel, with teacher ed
   const list = (chatType = '學生') => fetch(`${origin}/api/private-media/media?studentId=child-a&chatType=${encodeURIComponent(chatType)}`, { headers: { cookie } })
   const login = body => fetch(`${origin}/api/private-media/session`, { method: 'POST', headers: { origin, 'content-type': 'application/json' },
     body: JSON.stringify({ action: 'login', ...body }) })
-  let response = await login({ role: 'student', studentId: 'child-a', birthday: '20130514', idLast5: '12345' })
+  let response = await login({ role: 'student', authMethod: 'birthday-only', birthday: '20130514' })
   assert.equal(response.status, 200)
+  assert.equal((await response.clone().json()).studentId, 'child-a')
   cookie = response.headers.getSetCookie().find(value => value.startsWith('private_media_session=')).split(';')[0]
   const client = createClient(mediaUrl, 'fixture-public-key', { auth: { persistSession: false } })
   response = await post({ action: 'prepare', studentId: 'child-a', chatType: '學生', type: 'image/png', size: 4, caption: '原圖' })

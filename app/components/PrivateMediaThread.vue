@@ -36,7 +36,7 @@
 import { ref, watch, onMounted } from 'vue'
 
 const props = defineProps({ studentId: { type: [String, Number], default: '' }, chatType: { type: String, default: '' }, teacher: Boolean })
-const emit = defineEmits(['media-read'])
+const emit = defineEmits(['media-read', 'media-sent'])
 const supabase = useSupabaseClient()
 const items = ref([]), drafts = ref({}), error = ref(''), loading = ref(false), busy = ref(false)
 const loginRequired = ref(false), file = ref(null), caption = ref(''), fileInput = ref(null), hasMore = ref(false)
@@ -91,9 +91,11 @@ async function send() {
   if (!file.value || busy.value) return
   busy.value = true; error.value = ''
   try {
+    const sent = { mimeType: file.value.type, caption: caption.value.trim() }
     await upload(file.value, 'prepare')
     file.value = null; caption.value = ''
     if (fileInput.value) fileInput.value.value = ''
+    emit('media-sent', sent)
   } catch (err) { error.value = mediaError(err) }
   finally { busy.value = false }
 }

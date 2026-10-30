@@ -74,6 +74,12 @@ export async function verifyMediaIdentity(db, body, now = Date.now()) {
     if (error || !matchesLegacyTeacherPassword(body.password, data?.setting_value, body.timezoneOffset, now)) return null
     return { role: 'teacher' }
   }
+  if (body.role === 'student' && body.authMethod === 'birthday-only') {
+    if (typeof body.birthday !== 'string' || !/^\d{8}$/.test(body.birthday)) return null
+    const { data: student, error } = await db.from('students').select('id').eq('birthday', body.birthday).maybeSingle()
+    if (error || !student?.id) return null
+    return { role: 'student', studentId: String(student.id) }
+  }
   if (typeof body.studentId !== 'string' || !body.studentId || body.studentId.length > 80) return null
   const { data: student, error } = await db.from('students').select('*').eq('id', body.studentId).maybeSingle()
   if (error || !student) return null
