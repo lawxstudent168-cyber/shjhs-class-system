@@ -9,7 +9,14 @@ export function normalizeClassNotes(value) {
       : []
   return entries
     .filter(item => item && (item.date == null || item.date === '' || isValidExamDate(item.date)) && typeof item.content === 'string' && item.content.trim())
-    .map(item => ({ date: item.date || '', content: item.content.trim() }))
+    .map(item => {
+      const normalized = { date: item.date || '', content: item.content.trim() }
+      if (item.source === 'contact-book' && isValidExamDate(item.sourceDate)) {
+        normalized.source = 'contact-book'
+        normalized.sourceDate = item.sourceDate
+      }
+      return normalized
+    })
     .sort((a, b) => {
       if (!a.date && b.date) return -1
       if (a.date && !b.date) return 1

@@ -84,7 +84,8 @@
             <div class="history-date">{{ formatDisplayDate(record.record_date) }}</div>
             <ul class="item-list">
               <li v-for="(item, idx) in record.contact_items" :key="idx">
-                {{ idx + 1 }}. {{ privacyFilter(item) }}
+                {{ idx + 1 }}. {{ privacyFilter(contactItemContent(item)) }}
+                <span v-if="contactItemDueDate(item)" class="item-deadline">繳交期限：{{ classNoteDateLabel(contactItemDueDate(item)) }}</span>
               </li>
             </ul>
           </div>
@@ -96,6 +97,8 @@
 
 <script setup>
 import { beginContactHistorySession, trackVisitorEvent } from '../utils/visitorTrackingClient.js'
+import { contactItemContent, contactItemDueDate, normalizeContactBookItems } from '../utils/contactBook.js'
+import { classNoteDateLabel } from '../utils/classNotes.js'
 // 💡 確保核心套件完整引入，防止出現 500 系統報錯
 import { ref, onMounted } from 'vue'
 
@@ -235,7 +238,10 @@ const fetchRecords = async () => {
       
     if (error) throw error
 
-    records.value = data ? data.filter(r => r.contact_items && r.contact_items.length > 0) : []
+    records.value = data
+      ? data.map(record => ({ ...record, contact_items: normalizeContactBookItems(record.contact_items) }))
+        .filter(record => record.contact_items.length > 0)
+      : []
     void trackVisitorEvent({ kind: 'operation', label: '查詢近期聯絡簿', details: `${startStr} 至 ${endStr}，查得 ${records.value.length} 日紀錄`, outcome: '查詢成功（不代表已閱讀）' })
   } catch (e) {
     void trackVisitorEvent({ kind: 'operation', label: '查詢近期聯絡簿', outcome: '查詢失敗' })
@@ -323,6 +329,7 @@ const formatDisplayDate = (dateStr) => {
 .history-date { font-weight: bold; color: #be185d; font-size: 1.15rem; margin-bottom: 15px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 10px;}
 .item-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .item-list li { color: #334155; font-size: 1.1rem; line-height: 1.5; }
+.item-deadline { display: block; margin-left: 1.5em; color: #0369a1; font-size: .88em; font-weight: bold; }
 
 @media (max-width: 768px) {
   .workspace-header { flex-direction: column; align-items: stretch; text-align: center; }

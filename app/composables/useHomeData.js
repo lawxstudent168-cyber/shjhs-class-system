@@ -3,6 +3,7 @@ import { ref, computed, unref } from 'vue'
 import { normalizeAttendanceLockTime } from '../utils/attendanceAccess.js'
 import { displayedExamSchedule, normalizeExamSchedule, taiwanDateISO } from '../utils/examSchedule.js'
 import { normalizeClassNotes, weeklyClassNotes } from '../utils/classNotes.js'
+import { normalizeContactBookItems } from '../utils/contactBook.js'
 import { resolveSeatingLayout } from '../utils/seatingSchedule.js'
 import { normalizeRoleButtonSettings } from '../utils/homeButtonSettings.js'
 import { sanitizeHygieneAssignments } from '../utils/hygieneAssignments.js'
@@ -88,7 +89,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
     const currentIdentity = unref(currentIdentityRef)
 
     const { data: boardData, error: boardError } = await supabase.from('contact_books').select('contact_items').eq('record_date', todayISO).maybeSingle()
-    if (!boardError) contactBookItems.value = boardData?.contact_items || []
+    if (!boardError) contactBookItems.value = normalizeContactBookItems(boardData?.contact_items)
     contactBookLoaded.value = !boardError
 
     const keysToFetch = [

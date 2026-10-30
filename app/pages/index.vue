@@ -149,6 +149,7 @@
               :editingContactItems="editingContactItems"
               :isEditingContact="isEditingContact"
               :todayDisplay="todayDisplay"
+              :currentDate="classNotesTodayISO"
               :privacyFilter="privacyFilter"
               @open-pwd="openPwdModal('contact')"
               @cancel-edit="isEditingContact = false"
@@ -156,6 +157,7 @@
               @add-item="addContactItem"
               @remove-item="removeContactItem"
               @update-item="updateEditingContactItem"
+              @update-date="updateEditingContactDate"
             />
             
             <IndexModulesPanel 
@@ -244,6 +246,7 @@ import HomeGoodArticle from '~~/components/home/HomeGoodArticle.vue'
 import HomeStudentAssignments from '~~/components/home/HomeStudentAssignments.vue' 
 import { isAttendancePasswordFree } from '~/utils/attendanceAccess.js'
 import { normalizeClassNotes } from '~/utils/classNotes.js'
+import { editableContactBookItems, normalizeContactBookItems, syncContactDeadlinesToClassNotes } from '~/utils/contactBook.js'
 import { isValidExamDate, taiwanDateISO, taiwanClockHHMMSS } from '~/utils/examSchedule.js'
 import { isVideoBlackoutTime } from '~/utils/videoBlackout.js'
 import { effectiveHomeButtonSettings } from '~/utils/homeButtonSettings.js'
@@ -396,7 +399,7 @@ const handlePwdSuccess = async ({ target, role }) => {
   if (target === 'attendance' && role !== 'teacher' && role !== '導師') return alert('❌ 點名板僅限導師解鎖！')
   void logRoleVisit(role, target)
   if (target === 'emergency') showEmergencyModal.value = true
-  else if (target === 'contact') { isEditingContact.value = true; editingContactItems.value = [...contactBookItems.value] } 
+  else if (target === 'contact') { isEditingContact.value = true; editingContactItems.value = editableContactBookItems(contactBookItems.value) }
   else if (target === 'classNotes') {
     isEditingClassNotes.value = true
     const today = taiwanDateISO(nowTick.value)
@@ -419,12 +422,27 @@ const handleIdentityVerified = async (finalIdentity) => {
 const logAudit = async (actionType, details) => { void trackVisitorEvent({ kind: 'operation', label: actionType, details, outcome: '功能回報' }); try { await supabase.from('assignment_audit_logs').insert({ subject_name: '首頁黑板', action_type: actionType, operator_role: currentEditorRole.value || '導師', details: details }) } catch (e) {} }
 
 const saveContactItems = async () => {
+  let contactSaved = false
   try {
-    await supabase.from('contact_books').upsert({ record_date: todayISO, contact_items: editingContactItems.value }, { onConflict: 'record_date' })
-    await logAudit('修改聯絡簿', `更新為：${editingContactItems.value.length > 0 ? editingContactItems.value.join('、') : '清空無事項'}`)
-    alert("✅ 聯絡簿已成功更新發布！")
-    contactBookItems.value = [...editingContactItems.value]; isEditingContact.value = false
-  } catch (error) { alert("❌ 儲存失敗") }
+    const items = normalizeContactBookItems(editingContactItems.value)
+    const { error: contactError } = await supabase.from('contact_books').upsert({ record_date: todayISO, contact_items: items }, { onConflict: 'record_date' })
+    if (contactError) throw contactError
+    contactSaved = true
+
+    const { data: currentSettings, error: notesReadError } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'class_notes_data').maybeSingle()
+    if (notesReadError) throw notesReadError
+    const syncedNotes = syncContactDeadlinesToClassNotes(currentSettings?.setting_value, items, todayISO)
+    const { error: notesSaveError } = await supabase.from('system_settings').upsert({ setting_key: 'class_notes_data', setting_value: syncedNotes }, { onConflict: 'setting_key' })
+    if (notesSaveError) throw notesSaveError
+
+    await logAudit('修改聯絡簿', `更新為：${items.length > 0 ? items.map(item => `${item.content}${item.dueDate ? `（期限 ${item.dueDate}）` : ''}`).join('、') : '清空無事項'}`)
+    alert("✅ 聯絡簿已成功更新；有期限的項目已同步至班級注意事項！")
+    contactBookItems.value = items
+    allClassNoteItems.value = syncedNotes
+    isEditingContact.value = false
+  } catch (error) {
+    alert(contactSaved ? "⚠️ 聯絡簿已儲存，但班級注意事項同步失敗，請再儲存一次。" : "❌ 儲存失敗")
+  }
 }
 
 const saveClassNoteItems = async () => {
@@ -445,9 +463,10 @@ const saveClassNoteItems = async () => {
   } catch (error) { alert("❌ 儲存失敗") }
 }
 
-const addContactItem = () => { editingContactItems.value.push('') }
+const addContactItem = () => { editingContactItems.value.push({ content: '', dueDate: '' }) }
 const removeContactItem = (idx) => { editingContactItems.value.splice(idx, 1) }
-const updateEditingContactItem = (index, value) => { editingContactItems.value[index] = value }
+const updateEditingContactItem = (index, value) => { editingContactItems.value[index].content = value }
+const updateEditingContactDate = (index, value) => { editingContactItems.value[index].dueDate = value }
 const addClassNoteItem = () => { editingClassNoteItems.value.push({ date: '', content: '' }) }
 const removeClassNoteItem = (idx) => { editingClassNoteItems.value.splice(idx, 1) }
 const updateEditingClassNoteItem = (index, value) => { editingClassNoteItems.value[index].content = value }

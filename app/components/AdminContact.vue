@@ -14,11 +14,12 @@
           </label>
         </div>
 
-        <p class="help-text">用於記錄每日作業、明日攜帶物品。前台可由股長登入編輯。</p>
+        <p class="help-text">用於記錄每日作業、明日攜帶物品。繳交期限可留空；有設定期限的項目會自動同步到班級注意事項。</p>
         <div class="notice-edit-list">
           <div v-for="(item, index) in contactBookItems" :key="'c-'+index" class="edit-input-wrapper edit-item">
             <span class="bullet">✏️</span>
-            <input v-model="contactBookItems[index]" type="text" class="edit-input notice-input" placeholder="請輸入聯絡簿事項..." />
+            <input v-model="item.content" type="text" class="edit-input notice-input" placeholder="請輸入聯絡簿事項..." />
+            <label class="due-field"><span>繳交期限（可留空）</span><input v-model="item.dueDate" :min="todayISO" type="date" class="due-input" /></label>
             <button @click="removeContactItem(index)" class="del-row-btn">🗑️</button>
           </div>
           <button @click="addContactItem" class="add-btn">➕ 新增聯絡簿事項</button>
@@ -89,7 +90,10 @@
             <div v-if="!isEditingHistory">
               <div class="history-section">
                 <div v-if="selectedHistoryContactItems.length > 0" class="history-list">
-                  <div v-for="(c, i) in selectedHistoryContactItems" :key="'hc-'+i" class="history-item"><span class="bullet">✏️</span> {{ c }}</div>
+                  <div v-for="(c, i) in selectedHistoryContactItems" :key="'hc-'+i" class="history-item">
+                    <span class="bullet">✏️</span> {{ contactItemContent(c) }}
+                    <span v-if="contactItemDueDate(c)" class="history-due">期限：{{ classNoteDateLabel(contactItemDueDate(c)) }}</span>
+                  </div>
                 </div>
                 <div v-else class="empty-text">當日無聯絡簿事項</div>
               </div>
@@ -101,7 +105,8 @@
                 <div class="notice-edit-list">
                   <div v-for="(c, i) in editHistoryContactItems" :key="'ehc-'+i" class="edit-input-wrapper edit-item">
                     <span class="bullet">✏️</span>
-                    <input v-model="editHistoryContactItems[i]" type="text" class="edit-input notice-input" />
+                    <input v-model="c.content" type="text" class="edit-input notice-input" />
+                    <label class="due-field"><span>繳交期限（可留空）</span><input v-model="c.dueDate" type="date" class="due-input" /></label>
                     <button @click="removeHistoryContactItem(i)" class="del-row-btn">🗑️</button>
                   </div>
                   <button @click="addHistoryContactItem" class="add-btn">➕ 新增</button>
@@ -123,9 +128,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { contactItemContent, contactItemDueDate, editableContactBookItems, normalizeContactBookItems, syncContactDeadlinesToClassNotes } from '../utils/contactBook.js'
+import { classNoteDateLabel } from '../utils/classNotes.js'
+import { taiwanDateISO } from '../utils/examSchedule.js'
 const supabase = useSupabaseClient()
-const d = new Date()
-const todayISO = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+const todayISO = taiwanDateISO()
+const [todayYear, todayMonth] = todayISO.split('-').map(Number)
 
 const contactBookItems = ref([]) 
 const officerPasswords = ref({ academic: '', counseling: '' }) 
@@ -134,7 +142,7 @@ const isHistoryVisibleOnIndex = ref(false)
 const isSavingBoard = ref(false)
 const isSavingPwd = ref(false)
 
-const calYear = ref(d.getFullYear()); const calMonth = ref(d.getMonth())
+const calYear = ref(todayYear); const calMonth = ref(todayMonth - 1)
 const monthRecords = ref([])
 const selectedHistoryDate = ref('')
 const selectedHistoryContactItems = ref([])
@@ -145,7 +153,7 @@ const editHistoryContactItems = ref([])
 
 const fetchData = async () => {
   const { data: boardData } = await supabase.from('contact_books').select('contact_items').eq('record_date', todayISO).maybeSingle()
-  contactBookItems.value = boardData?.contact_items || []
+  contactBookItems.value = editableContactBookItems(boardData?.contact_items)
   
   const { data: sysData } = await supabase.from('system_settings').select('*').in('setting_key', ['board_officer_passwords', 'contact_history_visible'])
   if (sysData) {
@@ -167,7 +175,7 @@ const saveHistorySetting = async () => {
   }, { onConflict: 'setting_key' })
 }
 
-const addContactItem = () => contactBookItems.value.push('')
+const addContactItem = () => contactBookItems.value.push({ content: '', dueDate: '' })
 const removeContactItem = (i) => contactBookItems.value.splice(i, 1)
 
 const saveOfficerPasswords = async () => {
@@ -182,13 +190,27 @@ const saveOfficerPasswords = async () => {
 
 const saveBoard = async () => {
   isSavingBoard.value = true
-  await supabase.from('contact_books').upsert({ 
-    record_date: todayISO, 
-    contact_items: contactBookItems.value 
-  }, { onConflict: 'record_date' })
-  alert('✅ 聯絡簿已成功儲存至資料庫並同步前台！')
-  isSavingBoard.value = false
-  await fetchMonthRecords()
+  try {
+    contactBookItems.value = await saveContactRecord(todayISO, contactBookItems.value)
+    alert('✅ 聯絡簿已儲存；有期限的項目已同步到班級注意事項！')
+    await fetchMonthRecords()
+  } catch (error) {
+    alert('❌ 儲存或同步失敗：' + error.message)
+  } finally {
+    isSavingBoard.value = false
+  }
+}
+
+const saveContactRecord = async (recordDate, items) => {
+  const cleaned = normalizeContactBookItems(items)
+  const { error: contactError } = await supabase.from('contact_books').upsert({ record_date: recordDate, contact_items: cleaned }, { onConflict: 'record_date' })
+  if (contactError) throw contactError
+  const { data: notesData, error: notesReadError } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'class_notes_data').maybeSingle()
+  if (notesReadError) throw notesReadError
+  const syncedNotes = syncContactDeadlinesToClassNotes(notesData?.setting_value, cleaned, recordDate)
+  const { error: notesSaveError } = await supabase.from('system_settings').upsert({ setting_key: 'class_notes_data', setting_value: syncedNotes }, { onConflict: 'setting_key' })
+  if (notesSaveError) throw notesSaveError
+  return editableContactBookItems(cleaned)
 }
 
 // 💡 修正了當月天數計算錯誤的問題
@@ -207,12 +229,12 @@ const fetchMonthRecords = async () => {
     .gte('record_date', startDate)
     .lte('record_date', endDate)
     
-  monthRecords.value = data || []
+  monthRecords.value = (data || []).map(record => ({ ...record, contact_items: normalizeContactBookItems(record.contact_items) }))
 
   // 如果目前有選中某個日期，確保它的詳細內容會跟著 monthRecords 同步更新
   if (selectedHistoryDate.value) {
     const match = monthRecords.value.find(r => r.record_date === selectedHistoryDate.value)
-    selectedHistoryContactItems.value = match ? (match.contact_items || []) : []
+    selectedHistoryContactItems.value = match ? editableContactBookItems(match.contact_items) : []
   }
 }
 
@@ -225,7 +247,7 @@ const calendarDays = computed(() => {
     const dateStr = `${calYear.value}-${String(calMonth.value + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`
     const record = monthRecords.value.find(r => r.record_date === dateStr)
     const hasC = record && record.contact_items && record.contact_items.length > 0
-    days.push({ empty: false, day: i, dateStr: dateStr, hasRecord: hasC, contactItems: record ? (record.contact_items || []) : [] })
+    days.push({ empty: false, day: i, dateStr: dateStr, hasRecord: hasC, contactItems: record ? editableContactBookItems(record.contact_items) : [] })
   }
   return days
 })
@@ -236,23 +258,23 @@ const nextMonth = async () => { if (calMonth.value === 11) { calYear.value++; ca
 const viewHistory = (day) => {
   if (day.empty) return
   selectedHistoryDate.value = day.dateStr
-  selectedHistoryContactItems.value = day.contactItems
+  selectedHistoryContactItems.value = editableContactBookItems(day.contactItems)
   isEditingHistory.value = false
 }
 
-const startEditHistory = () => { editHistoryContactItems.value = [...selectedHistoryContactItems.value]; isEditingHistory.value = true }
+const startEditHistory = () => { editHistoryContactItems.value = editableContactBookItems(selectedHistoryContactItems.value); isEditingHistory.value = true }
 const cancelEditHistory = () => { isEditingHistory.value = false }
-const addHistoryContactItem = () => editHistoryContactItems.value.push('')
+const addHistoryContactItem = () => editHistoryContactItems.value.push({ content: '', dueDate: '' })
 const removeHistoryContactItem = (i) => editHistoryContactItems.value.splice(i, 1)
 
 const saveHistory = async () => {
   isSavingHistory.value = true
   try {
-    await supabase.from('contact_books').upsert({ record_date: selectedHistoryDate.value, contact_items: editHistoryContactItems.value }, { onConflict: 'record_date' })
-    alert('✅ 歷史紀錄已成功更新！')
-    selectedHistoryContactItems.value = [...editHistoryContactItems.value]; isEditingHistory.value = false
+    const saved = await saveContactRecord(selectedHistoryDate.value, editHistoryContactItems.value)
+    alert('✅ 歷史紀錄已更新；有期限的項目已同步到班級注意事項！')
+    selectedHistoryContactItems.value = editableContactBookItems(saved); isEditingHistory.value = false
     await fetchMonthRecords()
-    if (selectedHistoryDate.value === todayISO) { contactBookItems.value = [...editHistoryContactItems.value] }
+    if (selectedHistoryDate.value === todayISO) { contactBookItems.value = editableContactBookItems(saved) }
   } catch (error) { alert('❌ 儲存失敗：' + error.message) } finally { isSavingHistory.value = false }
 }
 </script>
@@ -273,6 +295,8 @@ const saveHistory = async () => {
 
 .edit-item { display: flex; align-items: center; gap: 10px; }
 .notice-input { flex: 1; font-size: 1.05rem; padding: 10px 12px; border: 1px solid #94a3b8; border-radius: 6px; width: 100%; box-sizing: border-box;}
+.due-field { display: flex; flex-direction: column; gap: 3px; color: #64748b; font-size: .78rem; white-space: nowrap; }
+.due-input { padding: 9px; border: 1px solid #94a3b8; border-radius: 6px; color: #334155; }
 .add-btn { background: #e2e8f0; color: #334155; border: 1px dashed #94a3b8; padding: 8px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 5px; width: 100%; }
 .del-row-btn { background: #ef4444; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; }
 
@@ -316,11 +340,15 @@ const saveHistory = async () => {
 .history-section h6 { font-size: 1.05rem; color: #475569; margin: 0 0 10px 0; }
 .history-list { display: flex; flex-direction: column; gap: 8px; }
 .history-item { font-size: 1.05rem; color: #334155; line-height: 1.4; word-break: break-all; }
+.history-due { display: block; margin-left: 1.6em; color: #0369a1; font-size: .88em; font-weight: bold; }
 .empty-text { color: #94a3b8; font-style: italic; }
 
 @media (max-width: 768px) {
   .calendar-layout { flex-direction: column; }
   .editor-panel, .calendar-box, .history-detail-box { padding: 15px; }
   .lg-btn { font-size: 1.05rem; padding: 12px; }
+  .edit-item { flex-wrap: wrap; }
+  .due-field { width: calc(100% - 32px); margin-left: 32px; }
+  .due-input { width: 100%; box-sizing: border-box; }
 }
 </style>
