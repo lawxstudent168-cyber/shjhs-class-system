@@ -1,5 +1,5 @@
 <template>
-  <NewsHeadlineCard provider="abc" />
+  <NewsHeadlineCard provider="bbc" />
 </template>
 
 <script setup>

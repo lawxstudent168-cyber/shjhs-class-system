@@ -17,10 +17,10 @@
 
       <HomeFoxNews v-if="mod.id === 'foxNews' && mod.isVisible" />
       
-      <!-- 💡 加入 CNN 與 ABC -->
+      <!-- 💡 英文新聞來源 -->
       <HomeCnnNews v-if="mod.id === 'cnnNews' && mod.isVisible" />
       
-      <HomeAbcNews v-if="mod.id === 'abcNews' && mod.isVisible" />
+      <HomeBbcNews v-if="mod.id === 'bbcNews' && mod.isVisible" />
       
     </template>
   </div>
@@ -35,7 +35,7 @@ import WikiOnThisDay from '~~/components/home/WikiOnThisDay.vue'
 import HomeYouTubeVideo from '~~/components/home/HomeYouTubeVideo.vue'
 import HomeFoxNews from '~~/components/home/HomeFoxNews.vue'
 import HomeCnnNews from '~~/components/home/HomeCnnNews.vue'
-import HomeAbcNews from '~~/components/home/HomeAbcNews.vue'
+import HomeBbcNews from '~~/components/home/HomeBbcNews.vue'
 
 const props = defineProps({
   indexModulesConfig: { type: Array, default: () => [] },

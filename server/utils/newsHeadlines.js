@@ -16,6 +16,17 @@ const sources = {
       'https://abcnews.go.com/abcnews/technologyheadlines'
     ]
   },
+  bbc: {
+    name: 'BBC News',
+    home: 'https://www.bbc.com/news',
+    host: 'bbc.com',
+    hosts: ['bbc.com', 'bbc.co.uk'],
+    feeds: [
+      'https://feeds.bbci.co.uk/news/rss.xml',
+      'https://feeds.bbci.co.uk/news/world/rss.xml',
+      'https://feeds.bbci.co.uk/news/business/rss.xml'
+    ]
+  },
   fox: { name: 'Fox News', home: 'https://www.foxnews.com/', host: 'foxnews.com', feeds: ['https://moxie.foxnews.com/google-publisher/latest.xml', 'https://feeds.foxnews.com/foxnews/latest'] },
   cnn: { name: 'CNN', home: 'https://edition.cnn.com/', host: 'cnn.com', feeds: ['https://rss.cnn.com/rss/edition.rss'] }
 }
@@ -24,6 +35,7 @@ const text = value => String(typeof value === 'object' && value ? value['#text']
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false, trimValues: true })
 export const isNewsProvider = provider => Object.hasOwn(sources, provider)
 const onHost = (url, host) => url.hostname === host || url.hostname.endsWith(`.${host}`)
+const onSourceHost = (url, source) => (source.hosts || [source.host]).some(host => onHost(url, host))
 const cleanTitle = (title, provider) => provider === 'abc' ? title.replace(/\s+[-–—|]\s+ABC News\s*$/i, '').trim() : title
 const safeUrl = (value, base) => {
   try {
@@ -54,9 +66,9 @@ export function parseNewsFeed(xml, provider, { aggregated = false, aggregator = 
     if (aggregated && aggregator === 'google') {
       const publisher = safeUrl(item.source?.['@_url'])
       const publisherName = text(item.source)
-      const publisherMatches = publisher ? onHost(new URL(publisher), source.host) : publisherName.toLowerCase() === source.name.toLowerCase()
+      const publisherMatches = publisher ? onSourceHost(new URL(publisher), source) : publisherName.toLowerCase() === source.name.toLowerCase()
       if (!publisherMatches || new URL(link).hostname !== 'news.google.com') continue
-    } else if (!onHost(new URL(link), source.host)) continue
+    } else if (!onSourceHost(new URL(link), source)) continue
     const date = Date.parse(text(item.pubDate || item.published || item.updated))
     // Some retired feeds still return 200 with years-old headlines.
     if (Number.isFinite(date) && (date < now - 7 * 86400_000 || date > now + 86400_000)) continue
@@ -75,7 +87,7 @@ export function parseNewsJson(value, provider, { now = Date.now() } = {}) {
     const link = safeUrl(item.link, source.home)
     if (!title || !link || title.length > 1000 || (provider === 'abc' && isGenericAbcTitle(title))) continue
     const url = new URL(link)
-    if (!onHost(url, source.host) || url.pathname === '/') continue
+    if (!onSourceHost(url, source) || url.pathname === '/') continue
     const date = Date.parse(text(item.pubDate))
     if (Number.isFinite(date) && (date < now - 7 * 86400_000 || date > now + 86400_000)) continue
     const image = safeUrl(item.thumbnail || item.enclosure?.link, source.home)

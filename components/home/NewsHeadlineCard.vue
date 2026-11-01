@@ -27,6 +27,7 @@ import { readNewsHeadline, writeNewsHeadline, validNewsHeadline } from '../../ap
 const props = defineProps({ provider: { type: String, required: true } })
 const source = {
   abc: { name: 'ABC News', icon: '⬛', home: 'https://abcnews.go.com/' },
+  bbc: { name: 'BBC News', icon: '🟥', home: 'https://www.bbc.com/news' },
   fox: { name: 'Fox News', icon: '🦊', home: 'https://www.foxnews.com/' },
   cnn: { name: 'CNN News', icon: '🟥', home: 'https://edition.cnn.com/' }
 }[props.provider]
@@ -72,6 +73,7 @@ onBeforeUnmount(() => controller?.abort())
 header { border-bottom: 2px dashed #e2e8f0; padding-bottom: 10px; margin-bottom: 15px; }
 h3 { margin: 0; color: #003366; font-size: 1.25rem; }
 .abc-news-card h3 { color: black; }
+.bbc-news-card h3 { color: #b80000; }
 .news-layout-wrapper { width: 66.66%; margin: 0 auto; }
 .news-link { display: block; text-decoration: none; overflow: hidden; border-radius: 8px; background: #f8fafc; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
 .news-link:hover { box-shadow: 0 8px 16px rgba(0,0,0,.2); }
@@ -79,6 +81,7 @@ h3 { margin: 0; color: #003366; font-size: 1.25rem; }
 .news-image { width: 100%; height: 100%; object-fit: cover; display: block; }
 .news-title-box { padding: 15px 20px; background: white; border-top: 4px solid #c00; }
 .abc-news-card .news-title-box { border-color: #3b82f6; }
+.bbc-news-card .news-title-box { border-color: #b80000; }
 .news-title { color: #1e293b; font-size: 1.2rem; font-weight: bold; line-height: 1.5; margin: 0; }
 .text-only .news-title {
   font-family: 'News Caveat', 'Segoe Print', 'Bradley Hand', 'KaiTi', cursive;

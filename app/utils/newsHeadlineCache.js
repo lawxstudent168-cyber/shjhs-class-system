@@ -1,5 +1,5 @@
 export const isGenericAbcTitle = title => /^[-–—\s]*(?:abc news\s*[-–—|:]\s*)?(?:breaking news,?\s*latest news and videos|abc news)(?:\s*[-–—|:]\s*abc news)?\s*$/i.test(title.trim())
-const hosts = { abc: 'abcnews.go.com', fox: 'foxnews.com', cnn: 'cnn.com' }
+const hosts = { abc: ['abcnews.go.com'], bbc: ['bbc.com', 'bbc.co.uk'], fox: ['foxnews.com'], cnn: ['cnn.com'] }
 const maxAge = 24 * 3600_000
 const key = provider => `class-news-headline-v1:${provider}`
 
@@ -9,7 +9,7 @@ export function validNewsHeadline(value, provider) {
   try {
     const url = new URL(value.link)
     if (url.protocol !== 'https:' || url.username || url.password) return false
-    return url.hostname === hosts[provider] || url.hostname.endsWith(`.${hosts[provider]}`) || (value.aggregated === true && url.hostname === 'news.google.com')
+    return hosts[provider].some(host => url.hostname === host || url.hostname.endsWith(`.${host}`)) || (value.aggregated === true && url.hostname === 'news.google.com')
   } catch { return false }
 }
 

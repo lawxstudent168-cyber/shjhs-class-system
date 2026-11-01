@@ -248,7 +248,7 @@ const defaultModules = [
   { id: 'youtube', name: '📺 YouTube 推薦影片', isVisible: true },
   { id: 'foxNews', name: '🦊 Fox News 頭條', isVisible: true },
   { id: 'cnnNews', name: '🟥 CNN News 頭條', isVisible: true },
-  { id: 'abcNews', name: '⬛ ABC News 頭條', isVisible: true }
+  { id: 'bbcNews', name: '🟥 BBC News 頭條', isVisible: true }
 ]
 const indexModules = ref(JSON.parse(JSON.stringify(defaultModules)))
 const dynamicSorting = ref(false)
@@ -298,6 +298,9 @@ const fetchConfig = async () => {
       if (modData.setting_value.modules) loadedMods = modData.setting_value.modules
       if (modData.setting_value.dynamicSorting !== undefined) dynamicSorting.value = modData.setting_value.dynamicSorting
     }
+    loadedMods = loadedMods.map(mod => mod.id === 'abcNews'
+      ? { ...mod, id: 'bbcNews', name: '🟥 BBC News 頭條' }
+      : mod).filter((mod, index, items) => items.findIndex(item => item.id === mod.id) === index)
     
     // 確保所有 defaultModules 都有在清單內
     const existingIds = loadedMods.map(m => m.id)

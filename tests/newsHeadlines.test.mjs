@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { createNewsService, parseNewsFeed, parseNewsJson, isNewsProvider } from '../server/utils/newsHeadlines.js'
 
 const now = Date.parse('2026-10-28T02:00:00Z')
@@ -23,6 +24,27 @@ test('parses official ABC, Fox and CNN RSS, CDATA, media and enclosure images', 
     assert.equal(result.link, link.replace('http:', 'https:'))
     assert.equal(result.image, 'https://images.example.com/photo.jpg')
   }
+})
+
+test('BBC official feeds accept current BBC.com and BBC.co.uk article links', () => {
+  for (const link of ['https://www.bbc.com/news/articles/example', 'https://www.bbc.co.uk/news/world-example']) {
+    const result = parseNewsFeed(feed(item({ title: 'Schools prepare for a new term', link })), 'bbc', { now })
+    assert.equal(result.title, 'Schools prepare for a new term')
+    assert.equal(result.link, link)
+    assert.equal(result.source, 'BBC News')
+  }
+  assert.throws(() => parseNewsFeed(feed(item({ link: 'https://bbc.com.attacker.example/news' })), 'bbc', { now }))
+})
+
+test('homepage replaces the ABC module with BBC while retaining legacy setting migration', () => {
+  const panel = readFileSync(new URL('../components/home/IndexModulesPanel.vue', import.meta.url), 'utf8')
+  const settings = readFileSync(new URL('../app/components/AdminSettings.vue', import.meta.url), 'utf8')
+  const homeData = readFileSync(new URL('../app/composables/useHomeData.js', import.meta.url), 'utf8')
+  assert.match(panel, /HomeBbcNews/)
+  assert.doesNotMatch(panel, /HomeAbcNews/)
+  assert.match(settings, /mod\.id === 'abcNews'/)
+  assert.match(homeData, /mod\.id === 'abcNews'/)
+  assert.match(homeData, /id: 'bbcNews'/)
 })
 
 test('headlines without images work, missing links and unsafe or wrong-publisher links are skipped', () => {

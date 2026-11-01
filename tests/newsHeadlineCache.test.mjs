@@ -28,3 +28,10 @@ test('cache is optional and malformed or unsafe headlines are ignored', () => {
   assert.equal(readNewsHeadline({ getItem: () => '{invalid' }, 'abc', now), null)
   assert.equal(validNewsHeadline({ ...headline, link: 'https://news.google.com/rss/articles/token', aggregated: true }, 'abc'), true)
 })
+
+test('BBC headlines accept both BBC domains and reject lookalike hosts', () => {
+  const bbcHeadline = { ...headline, link: 'https://www.bbc.com/news/articles/example' }
+  assert.equal(validNewsHeadline(bbcHeadline, 'bbc'), true)
+  assert.equal(validNewsHeadline({ ...bbcHeadline, link: 'https://www.bbc.co.uk/news/articles/example' }, 'bbc'), true)
+  assert.equal(validNewsHeadline({ ...bbcHeadline, link: 'https://bbc.com.attacker.example/news' }, 'bbc'), false)
+})

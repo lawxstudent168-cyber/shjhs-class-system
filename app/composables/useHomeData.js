@@ -37,7 +37,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
     { id: 'youtube', name: '📺 YouTube 推薦影片', isVisible: true },
     { id: 'foxNews', name: '🦊 Fox News 頭條', isVisible: true },
     { id: 'cnnNews', name: '🟥 CNN News 頭條', isVisible: true },
-    { id: 'abcNews', name: '⬛ ABC News 頭條', isVisible: true }
+    { id: 'bbcNews', name: '🟥 BBC News 頭條', isVisible: true }
   ])
   const indexDynamicSorting = ref(false)
 
@@ -135,6 +135,9 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
             case 'index_modules_config': 
               let loadedMods = []
               if (Array.isArray(v)) { loadedMods = v } else if (typeof v === 'object') { if (v.modules) loadedMods = v.modules; if (v.dynamicSorting !== undefined) indexDynamicSorting.value = v.dynamicSorting }
+              loadedMods = loadedMods.map(mod => mod.id === 'abcNews'
+                ? { ...mod, id: 'bbcNews', name: '🟥 BBC News 頭條' }
+                : mod).filter((mod, index, items) => items.findIndex(item => item.id === mod.id) === index)
               const existingIds = loadedMods.map(m => m.id)
               const defaultModsList = [
                 { id: 'wikiFeatured', name: '📖 維基百科 典範條目', isVisible: true },
@@ -143,7 +146,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
                 { id: 'youtube', name: '📺 YouTube 推薦影片', isVisible: true },
                 { id: 'foxNews', name: '🦊 Fox News 頭條', isVisible: true },
                 { id: 'cnnNews', name: '🟥 CNN News 頭條', isVisible: true },
-                { id: 'abcNews', name: '⬛ ABC News 頭條', isVisible: true }
+                { id: 'bbcNews', name: '🟥 BBC News 頭條', isVisible: true }
               ]
               defaultModsList.forEach(defMod => { if (!existingIds.includes(defMod.id)) loadedMods.push(defMod) })
               indexModulesConfig.value = loadedMods
