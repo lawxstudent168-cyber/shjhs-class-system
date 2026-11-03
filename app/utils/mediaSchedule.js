@@ -6,6 +6,18 @@ export function extractYouTubeVideoId(url) {
   return match?.[1]?.length === 11 ? match[1] : null
 }
 
+export function extractYouTubePlaylistId(url) {
+  if (typeof url !== 'string') return null
+  try {
+    const parsed = new URL(url.trim())
+    if (!['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(parsed.hostname.toLowerCase())) return null
+    const id = parsed.searchParams.get('list') || ''
+    return /^[A-Za-z0-9_-]{10,80}$/.test(id) ? id : null
+  } catch {
+    return null
+  }
+}
+
 const validUrl = url => typeof url === 'string' && Boolean(extractYouTubeVideoId(url.trim()))
 const entryUrl = entry => typeof entry === 'string' ? entry : typeof entry?.url === 'string' ? entry.url : ''
 
@@ -28,7 +40,18 @@ export function normalizeMediaSchedule(value, { nestedLegacy = false } = {}) {
     const url = entryUrl(candidate).trim()
     if (validUrl(url) && !library.includes(url)) library.push(url)
   }
-  return { calendar, library, legacy }
+  const titles = {}
+  for (const [url, title] of Object.entries(source.titles || {})) {
+    const cleanUrl = String(url || '').trim()
+    const cleanTitle = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 200)
+    if (validUrl(cleanUrl) && cleanTitle) titles[cleanUrl] = cleanTitle
+  }
+  return { calendar, library, legacy, titles }
+}
+
+export function mediaTitle(value, url, options = {}) {
+  const normalized = normalizeMediaSchedule(value, options)
+  return normalized.titles[String(url || '').trim()] || ''
 }
 
 const weekdayUTC = date => new Date(`${date}T00:00:00Z`).getUTCDay()

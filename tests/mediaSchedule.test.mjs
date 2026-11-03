@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { autoArrangeMedia, copyPreviousWeek, delayMediaSchedule, mediaCalendarDays, nextSchoolDay, normalizeMediaSchedule, resolveMediaForDate, setMediaForDate } from '../app/utils/mediaSchedule.js'
+import { autoArrangeMedia, copyPreviousWeek, delayMediaSchedule, extractYouTubePlaylistId, mediaCalendarDays, mediaTitle, nextSchoolDay, normalizeMediaSchedule, resolveMediaForDate, setMediaForDate } from '../app/utils/mediaSchedule.js'
+import { parseYouTubePlaylistFeed, parseYouTubePlaylistHtml, youtubePlaylistId } from '../server/utils/youtubePlaylist.js'
 
 const urls = [
   'https://youtu.be/aaaaaaaaaaa',
@@ -17,13 +18,27 @@ test('legacy weekday schedules remain available until a calendar schedule is cre
 })
 
 test('playlist auto-arrangement clearly numbers videos and skips weekends', () => {
-  const arranged = autoArrangeMedia({ library: urls, calendar: { '2026-11-12': { url: urls[0], order: 99 } } }, '2026-11-06')
+  const arranged = autoArrangeMedia({ library: urls, titles: { [urls[0]]: 'First video' }, calendar: { '2026-11-12': { url: urls[0], order: 99 } } }, '2026-11-06')
   assert.deepEqual(arranged.calendar, {
     '2026-11-06': { url: urls[0], order: 1 },
     '2026-11-09': { url: urls[1], order: 2 },
     '2026-11-10': { url: urls[2], order: 3 }
   })
   assert.equal(nextSchoolDay('2026-11-06'), '2026-11-09')
+  assert.equal(mediaTitle(arranged, urls[0]), 'First video')
+})
+
+test('YouTube playlist links and public playlist data are imported in their original order', () => {
+  const playlistUrl = 'https://www.youtube.com/playlist?list=PL576gqW2WI4abcdefghij'
+  assert.equal(extractYouTubePlaylistId(playlistUrl), 'PL576gqW2WI4abcdefghij')
+  assert.equal(youtubePlaylistId(playlistUrl), 'PL576gqW2WI4abcdefghij')
+  const html = '<script>{"playlistVideoRenderer":{"videoId":"aaaaaaaaaaa","title":{"runs":[{"text":"Lesson One"}]}},"playlistVideoRenderer":{"videoId":"bbbbbbbbbbb","title":{"simpleText":"Lesson Two"}}}</script>'
+  assert.deepEqual(parseYouTubePlaylistHtml(html), [
+    { url: 'https://www.youtube.com/watch?v=aaaaaaaaaaa', title: 'Lesson One' },
+    { url: 'https://www.youtube.com/watch?v=bbbbbbbbbbb', title: 'Lesson Two' }
+  ])
+  const feed = '<feed><entry><yt:videoId>ccccccccccc</yt:videoId><title>Song &amp; Dance</title></entry></feed>'
+  assert.deepEqual(parseYouTubePlaylistFeed(feed), [{ url: 'https://www.youtube.com/watch?v=ccccccccccc', title: 'Song & Dance' }])
 })
 
 test('weekends select only from videos played before that weekend', () => {
@@ -64,6 +79,9 @@ test('admin and homepage expose calendar, playlist, copy-week and password delay
   assert.match(editor, /複製上週清單/)
   assert.match(editor, /依清單順序自動排列/)
   assert.match(editor, /目前共有/)
+  assert.match(editor, /網址全部清空/)
+  assert.match(editor, /displayTitle/)
+  assert.match(editor, /api\/youtube\/resolve/)
   assert.match(admin, /MediaScheduleEditor/g)
   assert.match(delayButton, /導師動態密碼/)
   assert.match(delayButton, /延後到隔天/)
