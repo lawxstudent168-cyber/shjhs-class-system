@@ -60,4 +60,6 @@ test('class notes UI supports blank dates and a native fullscreen control', () =
   assert.match(board, /日期留空時永久顯示/)
   assert.match(admin, /事項日期（留空＝永久）/)
   assert.match(admin, /\{ date: '', content: '' \}/)
+  assert.match(board, /groupedClassNotes/)
+  assert.match(board, /same-date-items/)
 })

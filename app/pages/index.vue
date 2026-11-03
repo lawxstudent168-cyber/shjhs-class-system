@@ -119,6 +119,7 @@
               :isClassTime="isClassTime"
               :isScheduledBlackout="isVideoBlackout"
               :isMuted="englishSongSchedule.isMuted !== false"
+              :onDelay="password => delayHomeSchedule('song', password)"
             />
             
             <HomeWikiFeatured v-if="isWikiFeaturedVisible" />
@@ -167,6 +168,7 @@
               :todayVideoUrl="todayVideoUrl"
               :youtubeIsMuted="youtubeIsMuted"
               :isVideoBlackout="isVideoBlackout"
+              :onDelayVideo="password => delayHomeSchedule('video', password)"
             />
             
           </div>
@@ -247,8 +249,9 @@ import HomeStudentAssignments from '~~/components/home/HomeStudentAssignments.vu
 import { isAttendancePasswordFree } from '~/utils/attendanceAccess.js'
 import { normalizeClassNotes } from '~/utils/classNotes.js'
 import { editableContactBookItems, normalizeContactBookItems, syncContactDeadlinesToClassNotes } from '~/utils/contactBook.js'
+import { delayMediaSchedule, normalizeMediaSchedule, resolveMediaForDate } from '~/utils/mediaSchedule.js'
 import { isValidExamDate, taiwanDateISO, taiwanClockHHMMSS } from '~/utils/examSchedule.js'
-import { isVideoBlackoutTime } from '~/utils/videoBlackout.js'
+import { isVideoBlackoutTime, matchesTeacherVideoPassword } from '~/utils/videoBlackout.js'
 import { effectiveHomeButtonSettings } from '~/utils/homeButtonSettings.js'
 
 // 💡 匯入剛剛拆分出來的強大 Composables
@@ -326,9 +329,10 @@ const classNotesRangeDisplay = computed(() => `${classNotesTodayISO.value} 起 7
 // 以下是畫面專屬的 computed 與行為邏輯
 // ==============
 const activeGoodArticle = computed(() => goodArticles.value.find(a => a.is_published === true) || null)
-const todayEnglishSongUrl = computed(() => englishSongSchedule.value[new Date(nowTick.value).getDay()] || '')
+const mediaTodayISO = computed(() => taiwanDateISO(nowTick.value))
+const todayEnglishSongUrl = computed(() => resolveMediaForDate(englishSongSchedule.value, mediaTodayISO.value))
 const isEnglishSongVisible = computed(() => englishSongSchedule.value.isVisible !== false)
-const todayVideoUrl = computed(() => youtubeSchedule.value[new Date(nowTick.value).getDay()] || '')
+const todayVideoUrl = computed(() => resolveMediaForDate(youtubeSchedule.value, mediaTodayISO.value, { nestedLegacy: Boolean(youtubeSchedule.value?.videos) }))
 const isVideoBlackout = computed(() => isVideoBlackoutTime(youtubeBlockedDates.value, new Date(nowTick.value)))
 
 const indexButtonSettings = computed(() => {
@@ -420,6 +424,30 @@ const handleIdentityVerified = async (finalIdentity) => {
 }
 
 const logAudit = async (actionType, details) => { void trackVisitorEvent({ kind: 'operation', label: actionType, details, outcome: '功能回報' }); try { await supabase.from('assignment_audit_logs').insert({ subject_name: '首頁黑板', action_type: actionType, operator_role: currentEditorRole.value || '導師', details: details }) } catch (e) {} }
+
+const delayHomeSchedule = async (kind, password) => {
+  const settingKey = kind === 'song' ? 'english_song_schedule_data' : 'youtube_schedule_data'
+  const { data, error } = await supabase.from('system_settings').select('setting_key, setting_value').in('setting_key', ['admin_password', settingKey])
+  if (error) { alert('❌ 無法讀取排程設定。'); return false }
+  const passwordConfig = data?.find(item => item.setting_key === 'admin_password')?.setting_value
+  if (!matchesTeacherVideoPassword(password, passwordConfig)) { alert('❌ 導師動態密碼錯誤。'); return false }
+  const raw = data?.find(item => item.setting_key === settingKey)?.setting_value || {}
+  const options = { nestedLegacy: kind === 'video' && Boolean(raw.videos) }
+  const before = normalizeMediaSchedule(raw, options)
+  if (!Object.keys(before.calendar).some(date => date >= mediaTodayISO.value)) {
+    alert('目前沒有今天以後的月曆排程可延後。')
+    return false
+  }
+  const delayed = delayMediaSchedule(raw, mediaTodayISO.value, options)
+  const updated = { ...raw, calendar: delayed.calendar, library: delayed.library }
+  const { error: saveError } = await supabase.from('system_settings').upsert({ setting_key: settingKey, setting_value: updated }, { onConflict: 'setting_key' })
+  if (saveError) { alert('❌ 延後排程失敗。'); return false }
+  if (kind === 'song') englishSongSchedule.value = { ...englishSongSchedule.value, ...updated }
+  else youtubeSchedule.value = { ...youtubeSchedule.value, ...updated }
+  await logAudit(kind === 'song' ? '延後英語歌曲排程' : '延後推薦影片排程', `${mediaTodayISO.value} 起全部順延一個上課日`)
+  alert('✅ 排程已延後一個上課日（已跳過週六、週日），功能已自動上鎖。')
+  return true
+}
 
 const saveContactItems = async () => {
   let contactSaved = false

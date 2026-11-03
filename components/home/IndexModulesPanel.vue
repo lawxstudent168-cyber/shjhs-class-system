@@ -13,6 +13,7 @@
         :isMuted="youtubeIsMuted"
         :isClassTime="isClassTime"
         :isScheduledBlackout="isVideoBlackout"
+        :onDelay="onDelayVideo"
       />
 
       <HomeFoxNews v-if="mod.id === 'foxNews' && mod.isVisible" />
@@ -43,7 +44,8 @@ const props = defineProps({
   isClassTime: { type: Boolean, default: false },
   todayVideoUrl: { type: String, default: '' },
   youtubeIsMuted: { type: Boolean, default: true },
-  isVideoBlackout: { type: Boolean, default: false }
+  isVideoBlackout: { type: Boolean, default: false },
+  onDelayVideo: { type: Function, default: null }
 })
 
 // 💡 動態重組模組順序

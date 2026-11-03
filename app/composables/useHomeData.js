@@ -4,6 +4,7 @@ import { normalizeAttendanceLockTime } from '../utils/attendanceAccess.js'
 import { displayedExamSchedule, normalizeExamSchedule, taiwanDateISO } from '../utils/examSchedule.js'
 import { normalizeClassNotes, weeklyClassNotes } from '../utils/classNotes.js'
 import { normalizeContactBookItems } from '../utils/contactBook.js'
+import { normalizeMediaSchedule } from '../utils/mediaSchedule.js'
 import { resolveSeatingLayout } from '../utils/seatingSchedule.js'
 import { normalizeRoleButtonSettings } from '../utils/homeButtonSettings.js'
 import { sanitizeHygieneAssignments } from '../utils/hygieneAssignments.js'
@@ -50,7 +51,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
   const youtubeSchedule = ref({})
   const youtubeIsMuted = ref(true)
   const youtubeBlockedDates = ref([])
-  const englishSongSchedule = ref({ 0: '', 1: '', 2: '', 3: '', 4: '', 5: '', 6: '', isVisible: true })
+  const englishSongSchedule = ref({ 0: '', 1: '', 2: '', 3: '', 4: '', 5: '', 6: '', calendar: {}, library: [], isVisible: true })
   const parentNotices = ref([])
   const allClassNoteItems = ref([])
   const classNotesTodayISO = computed(() => taiwanDateISO(unref(nowTickRef)))
@@ -153,17 +154,15 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
               break
             case 'youtube_schedule_data': 
               if (typeof v === 'object') {
-                if (v.videos) {
-                  youtubeSchedule.value = v.videos
-                  youtubeIsMuted.value = v.isMuted !== false
-                  youtubeBlockedDates.value = Array.isArray(v.blockedDates) ? v.blockedDates : []
-                } else {
-                  youtubeSchedule.value = v
-                  youtubeIsMuted.value = true
-                  youtubeBlockedDates.value = []
-                }
+                const normalized = normalizeMediaSchedule(v, { nestedLegacy: Boolean(v.videos) })
+                youtubeSchedule.value = { ...v, calendar: normalized.calendar, library: normalized.library }
+                youtubeIsMuted.value = v.isMuted !== false
+                youtubeBlockedDates.value = Array.isArray(v.blockedDates) ? v.blockedDates : []
               } break
-            case 'english_song_schedule_data': if (typeof v === 'object') englishSongSchedule.value = { ...englishSongSchedule.value, ...v }; break
+            case 'english_song_schedule_data': if (typeof v === 'object') {
+              const normalized = normalizeMediaSchedule(v)
+              englishSongSchedule.value = { ...englishSongSchedule.value, ...v, calendar: normalized.calendar, library: normalized.library }
+            } break
             case 'parent_notices_data': if (Array.isArray(v)) { parentNotices.value = v.filter(n => !n.isHidden && (!n.startDate || n.startDate <= todayISO) && (!n.endDate || n.endDate >= todayISO)) }; break
             case 'class_notes_data': allClassNoteItems.value = normalizeClassNotes(v); break
             case 'seating_chart_data': if (typeof v === 'object') savedSeatingData.value = v; break

@@ -25,9 +25,11 @@
         <div v-if="!isEditingClassNotes">
           <div v-if="classNoteItems.length === 0" class="empty-text-italic">目前尚無班級注意事項...</div>
           <ul v-else class="item-list notes-list">
-            <li v-for="(item, index) in classNoteItems" :key="'cn-'+index">
-              <span class="note-date">{{ classNoteDateLabel(item.date) }}</span>
-              <span>{{ privacyFilter(item.content) }}</span>
+            <li v-for="group in groupedClassNotes" :key="group.date || 'permanent'">
+              <span class="note-date">{{ classNoteDateLabel(group.date) }}</span>
+              <span class="same-date-items">
+                <span v-for="(item, index) in group.items" :key="`${group.date}-${index}`" class="note-content">{{ privacyFilter(item.content) }}</span>
+              </span>
             </li>
           </ul>
         </div>
@@ -61,7 +63,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { classNoteDateLabel } from '~~/app/utils/classNotes.js'
 
 const props = defineProps({
@@ -78,6 +80,16 @@ defineEmits(['open-pwd', 'cancel-edit', 'save-items', 'add-item', 'remove-item',
 const isExpanded = ref(false)
 const isFullscreen = ref(false)
 const notesBoard = ref(null)
+const groupedClassNotes = computed(() => {
+  const groups = []
+  for (const item of props.classNoteItems || []) {
+    const date = item.date || ''
+    let group = groups.find(entry => entry.date === date)
+    if (!group) { group = { date, items: [] }; groups.push(group) }
+    group.items.push(item)
+  }
+  return groups
+})
 
 const syncFullscreen = () => {
   isFullscreen.value = document.fullscreenElement === notesBoard.value
@@ -175,6 +187,8 @@ watch(() => props.isEditingClassNotes, (newVal) => {
 .item-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
 .notes-list li { display: flex; align-items: baseline; gap: 12px; }
 .note-date { color: #7dd3fc; font-weight: bold; white-space: nowrap; }
+.same-date-items { display: flex; flex-wrap: wrap; gap: 5px 12px; min-width: 0; }
+.note-content:not(:last-child)::after { content: '；'; color: #94a3b8; }
 
 .edit-btn { background: #0ea5e9; color: white; border: none; padding: 6px 16px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; transition: 0.2s;}
 .edit-btn:hover { background: #0284c7; }

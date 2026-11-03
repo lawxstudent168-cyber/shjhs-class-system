@@ -2,6 +2,7 @@
   <div class="yt-board-card" v-if="videoId">
     <div class="card-header">
       <h3>📺 今日推薦影片</h3>
+      <ScheduleDelayButton v-if="onDelay" :on-delay="onDelay" />
       <span class="status-badge" :class="isPlaybackLocked && !isBypassed ? 'status-paused' : 'status-playing'">
         {{ isPlaybackLocked && !isBypassed ? (isScheduledBlackout ? '🔒 指定日期禁播中' : '⏸️ 上課暫停中') : '▶️ 播放中' }}
       </span>
@@ -42,6 +43,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { matchesTeacherVideoPassword } from '../../app/utils/videoBlackout.js'
+import ScheduleDelayButton from './ScheduleDelayButton.vue'
 
 const supabase = useSupabaseClient()
 
@@ -49,7 +51,8 @@ const props = defineProps({
   videoUrl: { type: String, default: '' },
   isMuted: { type: Boolean, default: true },
   isClassTime: { type: Boolean, default: false },
-  isScheduledBlackout: { type: Boolean, default: false }
+  isScheduledBlackout: { type: Boolean, default: false },
+  onDelay: { type: Function, default: null }
 })
 const isPlaybackLocked = computed(() => props.isClassTime || props.isScheduledBlackout)
 
