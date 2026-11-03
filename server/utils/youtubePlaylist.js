@@ -23,12 +23,19 @@ export function youtubePlaylistId(url) {
 }
 
 const rendererObjects = html => {
-  const marker = '"playlistVideoRenderer":'
+  const markers = ['"playlistVideoRenderer":', '"playlistPanelVideoRenderer":']
   const objects = []
-  let cursor = 0
-  while ((cursor = html.indexOf(marker, cursor)) !== -1) {
+  const occurrences = markers.flatMap(marker => {
+    const found = []
+    let cursor = 0
+    while ((cursor = html.indexOf(marker, cursor)) !== -1) { found.push({ cursor, marker }); cursor += marker.length }
+    return found
+  }).sort((a, b) => a.cursor - b.cursor)
+  for (const occurrence of occurrences) {
+    let cursor = occurrence.cursor
+    const marker = occurrence.marker
     const start = html.indexOf('{', cursor + marker.length)
-    if (start === -1) break
+    if (start === -1) continue
     let depth = 0
     let quoted = false
     let escaped = false
@@ -44,11 +51,9 @@ const rendererObjects = html => {
       else if (char === '{') depth++
       else if (char === '}' && --depth === 0) {
         objects.push(html.slice(start, index + 1))
-        cursor = index + 1
         break
       }
     }
-    if (cursor <= start) break
   }
   return objects
 }

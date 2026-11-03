@@ -39,6 +39,8 @@ test('YouTube playlist links and public playlist data are imported in their orig
   ])
   const feed = '<feed><entry><yt:videoId>ccccccccccc</yt:videoId><title>Song &amp; Dance</title></entry></feed>'
   assert.deepEqual(parseYouTubePlaylistFeed(feed), [{ url: 'https://www.youtube.com/watch?v=ccccccccccc', title: 'Song & Dance' }])
+  const embed = '{"playlistPanelVideoRenderer":{"videoId":"ddddddddddd","title":{"simpleText":"Embedded Lesson"}}}'
+  assert.deepEqual(parseYouTubePlaylistHtml(embed), [{ url: 'https://www.youtube.com/watch?v=ddddddddddd', title: 'Embedded Lesson' }])
 })
 
 test('weekends select only from videos played before that weekend', () => {
@@ -82,6 +84,8 @@ test('admin and homepage expose calendar, playlist, copy-week and password delay
   assert.match(editor, /網址全部清空/)
   assert.match(editor, /displayTitle/)
   assert.match(editor, /api\/youtube\/resolve/)
+  assert.match(editor, /getPlaylist/)
+  assert.match(editor, /iframe_api/)
   assert.match(admin, /MediaScheduleEditor/g)
   assert.match(delayButton, /導師動態密碼/)
   assert.match(delayButton, /延後到隔天/)

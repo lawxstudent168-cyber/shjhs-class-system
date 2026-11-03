@@ -16,12 +16,34 @@ export default defineEventHandler(async event => {
 
   if (playlistId) {
     let items = []
+    let pageHtml = ''
     try {
       const response = await fetchWithTimeout(`https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}&hl=zh-TW`, {
         headers: { 'user-agent': 'Mozilla/5.0 (compatible; ClassSchedule/1.0)', 'accept-language': 'zh-TW,zh;q=0.9,en;q=0.7' }
       })
-      if (response.ok) items = parseYouTubePlaylistHtml(await response.text())
+      if (response.ok) { pageHtml = await response.text(); items = parseYouTubePlaylistHtml(pageHtml) }
     } catch {}
+    if (!items.length) {
+      try {
+        const embed = await fetchWithTimeout(`https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(playlistId)}&hl=zh-TW`, {
+          headers: { 'user-agent': 'Mozilla/5.0 (compatible; ClassSchedule/1.0)', 'accept-language': 'zh-TW,zh;q=0.9,en;q=0.7' }
+        })
+        if (embed.ok) { const embedHtml = await embed.text(); pageHtml ||= embedHtml; items = parseYouTubePlaylistHtml(embedHtml) }
+      } catch {}
+    }
+    if (!items.length && pageHtml) {
+      const apiKey = pageHtml.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/)?.[1]
+      const clientVersion = pageHtml.match(/"INNERTUBE_CLIENT_VERSION"\s*:\s*"([^"]+)"/)?.[1]
+      if (apiKey && clientVersion) {
+        try {
+          const browse = await fetchWithTimeout(`https://www.youtube.com/youtubei/v1/browse?key=${encodeURIComponent(apiKey)}`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ context: { client: { clientName: 'WEB', clientVersion, hl: 'zh-TW' } }, browseId: `VL${playlistId}` })
+          })
+          if (browse.ok) items = parseYouTubePlaylistHtml(await browse.text())
+        } catch {}
+      }
+    }
     if (!items.length) {
       try {
         const feed = await fetchWithTimeout(`https://www.youtube.com/feeds/videos.xml?playlist_id=${encodeURIComponent(playlistId)}`)

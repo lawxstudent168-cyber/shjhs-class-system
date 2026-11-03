@@ -17,6 +17,7 @@
     </div>
     <p v-if="newUrl && !isSupportedUrl" class="error-text">請輸入 YouTube 單支影片或播放清單網址。</p>
     <p v-if="loadMessage" class="load-message">{{ loadMessage }}</p>
+    <div ref="playlistProbe" class="playlist-probe" aria-hidden="true"></div>
 
     <ol v-if="normalized.library.length" class="playlist">
       <li v-for="(url, index) in normalized.library" :key="url">
@@ -80,6 +81,7 @@ const today = taiwanDateISO()
 const month = ref(today.slice(0, 7))
 const startDate = ref(today)
 const selectedDate = ref(today)
+const playlistProbe = ref(null)
 const newUrl = ref('')
 const isLoading = ref(false)
 const loadMessage = ref('')
@@ -96,21 +98,100 @@ const clearedLegacy = () => props.nestedLegacy
 const update = value => emit('update:modelValue', { ...props.modelValue, ...clearedLegacy(), calendar: value.calendar, library: value.library, titles: value.titles || {} })
 const displayTitle = url => normalized.value.titles[url] || '名稱讀取中／尚未取得'
 
+const ensureYouTubePlayerApi = () => {
+  if (window.YT?.Player) return Promise.resolve(window.YT)
+  if (window.__classYouTubeApiPromise) return window.__classYouTubeApiPromise
+  window.__classYouTubeApiPromise = new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error('YouTube 播放器載入逾時')), 15000)
+    const previous = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof previous === 'function') previous()
+      window.clearTimeout(timeout)
+      resolve(window.YT)
+    }
+    if (!document.getElementById('youtube-iframe-api')) {
+      const script = document.createElement('script')
+      script.id = 'youtube-iframe-api'
+      script.src = 'https://www.youtube.com/iframe_api'
+      script.onerror = () => { window.clearTimeout(timeout); reject(new Error('YouTube 播放器無法載入')) }
+      document.head.appendChild(script)
+    }
+  })
+  return window.__classYouTubeApiPromise
+}
+
+const resolvePlaylistInBrowser = async playlistId => {
+  const YT = await ensureYouTubePlayerApi()
+  return await new Promise((resolve, reject) => {
+    if (!playlistProbe.value) return reject(new Error('播放清單讀取器尚未就緒'))
+    const mount = document.createElement('div')
+    playlistProbe.value.replaceChildren(mount)
+    let player
+    let polls = 0
+    const timeout = window.setTimeout(() => finish(new Error('播放清單讀取逾時')), 18000)
+    const finish = (error, ids = []) => {
+      window.clearTimeout(timeout)
+      try { player?.destroy() } catch {}
+      playlistProbe.value?.replaceChildren()
+      if (error) reject(error); else resolve(ids)
+    }
+    const readPlaylist = () => {
+      const ids = player?.getPlaylist?.() || []
+      if (ids.length) return finish(null, [...new Set(ids)])
+      if (++polls >= 20) return finish(new Error('播放清單沒有可播放的公開影片'))
+      window.setTimeout(readPlaylist, 400)
+    }
+    player = new YT.Player(mount, {
+      width: '1', height: '1',
+      playerVars: { listType: 'playlist', list: playlistId, playsinline: 1 },
+      events: { onReady: readPlaylist, onError: () => finish(new Error('YouTube 無法開啟此播放清單')) }
+    })
+  })
+}
+
+const resolveBrowserPlaylistItems = async playlistId => {
+  const ids = await resolvePlaylistInBrowser(playlistId)
+  const items = []
+  for (let index = 0; index < ids.length; index += 5) {
+    const batch = ids.slice(index, index + 5)
+    const resolved = await Promise.all(batch.map(async id => {
+      const url = `https://www.youtube.com/watch?v=${id}`
+      try { return (await $fetch('/api/youtube/resolve', { method: 'POST', body: { url } })).items?.[0] || { url, title: `YouTube 影片 ${id}` } }
+      catch { return { url, title: `YouTube 影片 ${id}` } }
+    }))
+    items.push(...resolved)
+  }
+  return { type: 'playlist', count: items.length, items }
+}
+
+const importResolvedItems = result => {
+  const value = normalizeMediaSchedule(props.modelValue, { nestedLegacy: props.nestedLegacy })
+  let added = 0
+  for (const item of result.items || []) {
+    if (!value.library.includes(item.url)) { value.library.push(item.url); added++ }
+    if (item.title) value.titles[item.url] = item.title
+    metadataAttempts.add(item.url)
+  }
+  update(value)
+  return added
+}
+
 const addUrl = async () => {
   const url = newUrl.value.trim()
-  if (!extractYouTubeVideoId(url) && !extractYouTubePlaylistId(url)) return
+  const playlistId = extractYouTubePlaylistId(url)
+  if (!extractYouTubeVideoId(url) && !playlistId) return
   isLoading.value = true
   loadMessage.value = ''
   try {
-    const result = await $fetch('/api/youtube/resolve', { method: 'POST', body: { url } })
-    const value = normalizeMediaSchedule(props.modelValue, { nestedLegacy: props.nestedLegacy })
-    let added = 0
-    for (const item of result.items || []) {
-      if (!value.library.includes(item.url)) { value.library.push(item.url); added++ }
-      if (item.title) value.titles[item.url] = item.title
-      metadataAttempts.add(item.url)
+    let result
+    try {
+      result = await $fetch('/api/youtube/resolve', { method: 'POST', body: { url } })
+    } catch (serverError) {
+      if (!playlistId) throw serverError
+      loadMessage.value = '伺服器來源無資料，正在由瀏覽器直接讀取播放清單…'
+      result = await resolveBrowserPlaylistItems(playlistId)
     }
-    update(value)
+    const added = importResolvedItems(result)
     loadMessage.value = result.type === 'playlist'
       ? `✅ 已讀取播放清單：共 ${result.count} 部影片，本次新增 ${added} 部。`
       : `✅ 已載入「${result.items?.[0]?.title || 'YouTube 影片'}」。`
@@ -168,6 +249,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .add-row input { flex: 1; min-width: 240px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; }
 .error-text { color: #dc2626; margin: 6px 0; }
 .load-message { color: #0369a1; margin: 7px 0; font-weight: bold; }
+.playlist-probe { position: fixed; width: 1px; height: 1px; left: -10000px; top: -10000px; overflow: hidden; opacity: 0; pointer-events: none; }
 .empty-text { color: #94a3b8; font-style: italic; }
 .playlist { margin: 14px 0; padding-left: 28px; }
 .playlist li { display: grid; grid-template-columns: 90px minmax(0, 1fr) 34px; align-items: center; gap: 8px; margin: 7px 0; }
