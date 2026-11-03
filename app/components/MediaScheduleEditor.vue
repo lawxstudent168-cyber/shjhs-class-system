@@ -172,7 +172,14 @@ const importResolvedItems = result => {
     if (item.title) value.titles[item.url] = item.title
     metadataAttempts.add(item.url)
   }
-  update(value)
+  const nextValue = result.type === 'playlist'
+    ? autoArrangeMedia(value, startDate.value, { nestedLegacy: props.nestedLegacy })
+    : value
+  update(nextValue)
+  if (result.type === 'playlist' && startDate.value) {
+    month.value = startDate.value.slice(0, 7)
+    selectedDate.value = startDate.value
+  }
   return added
 }
 
@@ -193,7 +200,7 @@ const addUrl = async () => {
     }
     const added = importResolvedItems(result)
     loadMessage.value = result.type === 'playlist'
-      ? `✅ 已讀取播放清單：共 ${result.count} 部影片，本次新增 ${added} 部。`
+      ? `✅ 已讀取播放清單：共 ${result.count} 部影片，本次新增 ${added} 部；已從 ${startDate.value} 起依序填入月曆並跳過週末。`
       : `✅ 已載入「${result.items?.[0]?.title || 'YouTube 影片'}」。`
     newUrl.value = ''
   } catch (error) {

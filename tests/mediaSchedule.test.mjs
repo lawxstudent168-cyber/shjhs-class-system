@@ -86,6 +86,8 @@ test('admin and homepage expose calendar, playlist, copy-week and password delay
   assert.match(editor, /api\/youtube\/resolve/)
   assert.match(editor, /getPlaylist/)
   assert.match(editor, /iframe_api/)
+  assert.match(editor, /result\.type === 'playlist'[\s\S]*autoArrangeMedia/)
+  assert.match(editor, /已從.*起依序填入月曆並跳過週末/)
   assert.match(admin, /MediaScheduleEditor/g)
   assert.match(delayButton, /導師動態密碼/)
   assert.match(delayButton, /延後到隔天/)
