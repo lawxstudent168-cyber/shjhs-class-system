@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { emptySeatingMode, normalizeSeatingSchedule, resolveSeatingLayout, resolveSeatingMode } from '../app/utils/seatingSchedule.js'
+import { readFileSync } from 'node:fs'
 import { taiwanDateISO } from '../app/utils/examSchedule.js'
 
 const data = {
@@ -43,4 +44,24 @@ test('clearing a mode removes its seat data and print template without deleting 
   assert.deepEqual(cleared.seats.map(seat => seat.id), Array.from({ length: 30 }, (_, index) => index + 1))
   assert.ok(cleared.seats.every(seat => !seat.seatNum && !seat.name && !seat.other))
   assert.equal(cleared.printData.title, '')
+})
+
+test('six and seven column layouts preserve their selected column count', () => {
+  const seven = emptySeatingMode(7)
+  assert.equal(seven.columnCount, 7)
+  assert.equal(seven.seats.length, 35)
+  const resolved = resolveSeatingLayout({ activeMode: 'normal', modes: { normal: seven } }, '2026-11-17')
+  assert.equal(resolved.columnCount, 7)
+  assert.equal(resolved.seats.length, 35)
+  assert.equal(resolveSeatingLayout({ seats: Array.from({ length: 30 }, (_, id) => ({ id })) }, '2026-11-17').columnCount, 6)
+})
+
+test('seat editor and homepage render the saved six or seven columns dynamically', () => {
+  const editor = readFileSync(new URL('../app/pages/seats.vue', import.meta.url), 'utf8')
+  const homepage = readFileSync(new URL('../components/home/SeatingAndHygiene.vue', import.meta.url), 'utf8')
+  assert.match(editor, /六排/)
+  assert.match(editor, /七排/)
+  assert.match(editor, /changeColumnCount/)
+  assert.match(editor, /gridColumnsStyle\(columnCount\)/)
+  assert.match(homepage, /seatingColumnCount/)
 })

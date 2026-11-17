@@ -5,10 +5,10 @@
       <h3 class="seating-title">🪑 班級座位表</h3>
       <div class="seating-wrapper">
         <div :class="['seating-area', { 'is-rotated': seatingChart.isRotated }]">
-          <div class="labels-grid-readonly">
-            <div v-for="n in 6" :key="'readonly-label-'+n" class="row-label-readonly">第{{ n }}排</div>
+          <div class="labels-grid-readonly" :style="gridColumnsStyle">
+            <div v-for="n in seatingColumnCount" :key="'readonly-label-'+n" class="row-label-readonly">第{{ n }}排</div>
           </div>
-          <div class="seats-grid-readonly">
+          <div class="seats-grid-readonly" :style="gridColumnsStyle">
             <div v-for="seat in seatingChart.seats" :key="seat.id" :class="['seat-card-readonly', { 'is-hidden-seat-readonly': seat.isHidden }]">
               <div class="seat-id-readonly">{{ seat.id }}</div>
               <div class="seat-text-container">
@@ -149,7 +149,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 const props = defineProps({
   seatingChart: Object,
   showSeatingChartLocal: Boolean,
@@ -161,6 +161,8 @@ const props = defineProps({
 })
 
 const activeHygieneTab = ref('morning')
+const seatingColumnCount = computed(() => props.seatingChart?.columnCount === 7 ? 7 : 6)
+const gridColumnsStyle = computed(() => ({ gridTemplateColumns: `repeat(${seatingColumnCount.value}, minmax(0, 1fr))` }))
 </script>
 
 <style scoped>

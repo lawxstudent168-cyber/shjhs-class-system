@@ -1,12 +1,17 @@
+import { normalizeSeatingColumnCount } from './seatingSchedule.js'
+
 const FILE_FORMAT = 'shjhs-seating-mode'
 const CSV_COLUMNS = ['位置', '網格編號', '座號', '姓名', '其他標註', '是否隱藏', '是否旋轉', '首頁顯示', '座號大小', '座號顏色', '姓名大小', '姓名顏色', '其他大小', '其他顏色', '列印設定JSON']
 
 const text = value => String(value ?? '')
 
 export function validateSeatingMode(layout) {
-  if (!layout || !Array.isArray(layout.seats) || layout.seats.length !== 30) throw new Error('座位檔案必須有 30 個座位')
+  if (!layout || !Array.isArray(layout.seats)) throw new Error('座位檔案缺少座位資料')
+  const columnCount = normalizeSeatingColumnCount(layout.columnCount, layout.seats)
+  const expectedCount = columnCount * 5
+  if (layout.seats.length !== expectedCount) throw new Error(`${columnCount} 排座位檔案必須有 ${expectedCount} 個座位`)
   const ids = layout.seats.map(seat => Number(seat?.id))
-  if (ids.some(id => !Number.isInteger(id) || id < 1 || id > 30) || new Set(ids).size !== 30) throw new Error('網格編號必須為不重複的 1–30')
+  if (ids.some(id => !Number.isInteger(id) || id < 1 || id > expectedCount) || new Set(ids).size !== expectedCount) throw new Error(`網格編號必須為不重複的 1–${expectedCount}`)
   const seats = layout.seats.map(seat => ({
     id: Number(seat.id),
     seatNum: text(seat.seatNum),
@@ -27,7 +32,7 @@ export function validateSeatingMode(layout) {
     defaults[key] = color
   }
   const printData = layout.printData && typeof layout.printData === 'object' && !Array.isArray(layout.printData) ? layout.printData : {}
-  return { seats, isRotated: layout.isRotated === true, isVisible: layout.isVisible !== false, settings: defaults, printData: { ...printData } }
+  return { columnCount, seats, isRotated: layout.isRotated === true, isVisible: layout.isVisible !== false, settings: defaults, printData: { ...printData } }
 }
 
 export function exportSeatingModeJson(layout, mode) {
@@ -81,17 +86,18 @@ export function exportSeatingModeCsv(layout) {
 
 export function importSeatingModeCsv(source) {
   const [header, ...rows] = parseCsv(source)
-  if (!header || header.join(',') !== CSV_COLUMNS.join(',') || rows.length !== 30 || rows.some(row => row.length !== CSV_COLUMNS.length)) {
+  if (!header || header.join(',') !== CSV_COLUMNS.join(',') || ![30, 35].includes(rows.length) || rows.some(row => row.length !== CSV_COLUMNS.length)) {
     throw new Error('CSV 格式或座位數不正確，請使用本系統匯出的檔案')
   }
   const ordered = rows.map(row => row.map(unguard)).sort((a, b) => Number(a[0]) - Number(b[0]))
-  if (ordered.some((row, index) => Number(row[0]) !== index + 1)) throw new Error('CSV 位置必須為不重複的 1–30')
+  if (ordered.some((row, index) => Number(row[0]) !== index + 1)) throw new Error(`CSV 位置必須為不重複的 1–${rows.length}`)
   const first = ordered[0]
   let printData
   try { printData = JSON.parse(first[14]) } catch { throw new Error('CSV 列印設定無效') }
   const metadata = row => row.slice(6).join('\u0000')
   if (ordered.some(row => metadata(row) !== metadata(first))) throw new Error('CSV 各列的模式設定不一致')
   return validateSeatingMode({
+    columnCount: rows.length === 35 ? 7 : 6,
     seats: ordered.map(row => ({ id: Number(row[1]), seatNum: row[2], name: row[3], other: row[4], isHidden: row[5] === '是' })),
     isRotated: first[6] === '是', isVisible: first[7] === '是',
     settings: { numberSize: first[8], numberColor: first[9], nameSize: first[10], nameColor: first[11], otherSize: first[12], otherColor: first[13] },

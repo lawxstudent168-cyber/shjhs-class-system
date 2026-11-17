@@ -2,6 +2,7 @@ import { isValidExamDate } from './examSchedule.js'
 
 export const seatingModeKeys = ['normal', 'normalB', 'backup', 'backupB', 'exam', 'mock']
 const validMode = mode => seatingModeKeys.includes(mode)
+export const normalizeSeatingColumnCount = (value, seats = []) => Number(value) === 7 || (value == null && seats.length === 35) ? 7 : 6
 
 export function normalizeSeatingSchedule(value) {
   const starts = new Map()
@@ -34,15 +35,19 @@ export function resolveSeatingLayout(data, date) {
   if (!data || typeof data !== 'object') return { seats: [], isVisible: false, isRotated: false, settings: {} }
   const mode = resolveSeatingMode(data, date)
   const source = data.modes?.[mode] || data
-  const seats = (Array.isArray(source.seats) ? source.seats : []).map(seat => seat.content !== undefined
+  const rawSeats = Array.isArray(source.seats) ? source.seats : []
+  const columnCount = normalizeSeatingColumnCount(source.columnCount, rawSeats)
+  const seats = rawSeats.slice(0, columnCount * 5).map(seat => seat.content !== undefined
     ? { id: seat.id, isHidden: seat.isHidden, seatNum: String(seat.content).split('\n')[0] || '', name: String(seat.content).split('\n')[1] || '', other: String(seat.content).split('\n').slice(2).join(' ') || '' }
     : seat)
-  return { activeMode: mode, seats, isVisible: source.isVisible === true, isRotated: source.isRotated === true, settings: source.settings || {}, printData: source.printData || {} }
+  return { activeMode: mode, columnCount, seats, isVisible: source.isVisible === true, isRotated: source.isRotated === true, settings: source.settings || {}, printData: source.printData || {} }
 }
 
-export function emptySeatingMode() {
+export function emptySeatingMode(columnCount = 6) {
+  const columns = normalizeSeatingColumnCount(columnCount)
   return {
-    seats: Array.from({ length: 30 }, (_, index) => ({ id: index + 1, seatNum: '', name: '', other: '', isHidden: false })),
+    columnCount: columns,
+    seats: Array.from({ length: columns * 5 }, (_, index) => ({ id: index + 1, seatNum: '', name: '', other: '', isHidden: false })),
     isRotated: false,
     isVisible: true,
     settings: { numberSize: 16, numberColor: '#64748b', nameSize: 20, nameColor: '#e11d48', otherSize: 14, otherColor: '#94a3b8' },

@@ -5,6 +5,7 @@ import {
 } from '../app/utils/seatingModeFiles.js'
 
 const layout = () => ({
+  columnCount: 6,
   seats: Array.from({ length: 30 }, (_, index) => ({
     id: 30 - index,
     seatNum: `${index + 1}號`,
@@ -33,4 +34,12 @@ test('imports reject incomplete or duplicate seat files', () => {
   const duplicate = layout()
   duplicate.seats[0].id = duplicate.seats[1].id
   assert.throws(() => importSeatingModeJson(JSON.stringify({ format: 'shjhs-seating-mode', version: 1, layout: duplicate })), /不重複/)
+})
+
+test('seven-column modes round-trip all 35 positions', () => {
+  const seven = layout()
+  seven.columnCount = 7
+  seven.seats.push(...Array.from({ length: 5 }, (_, index) => ({ id: 31 + index, seatNum: '', name: '', other: '', isHidden: false })))
+  assert.deepEqual(importSeatingModeJson(exportSeatingModeJson(seven, 'normal')), seven)
+  assert.deepEqual(importSeatingModeCsv(exportSeatingModeCsv(seven)), seven)
 })

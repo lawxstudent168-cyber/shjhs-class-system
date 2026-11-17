@@ -33,6 +33,13 @@
           
           <div class="style-controls-wrapper">
             <div class="style-group">
+              <span class="group-label">排數：</span>
+              <select :value="columnCount" class="num-input row-count-select" @change="changeColumnCount(Number($event.target.value), $event)">
+                <option :value="6">六排</option>
+                <option :value="7">七排</option>
+              </select>
+            </div>
+            <div class="style-group">
               <span class="group-label">座號：</span>
               <input type="number" v-model="seatSettings.numberSize" min="10" max="40" class="num-input"> px
               <input type="color" v-model="seatSettings.numberColor" class="color-input">
@@ -130,13 +137,13 @@
       <div class="classroom-wrapper">
         <div :class="['classroom-area', { 'is-rotated': isRotated }]">
           
-          <div class="labels-grid">
-            <div v-for="n in 6" :key="'label-'+n" class="row-label">第{{ n }}排</div>
+          <div class="labels-grid" :style="gridColumnsStyle(columnCount)">
+            <div v-for="n in columnCount" :key="'label-'+n" class="row-label">第{{ n }}排</div>
           </div>
 
-          <div class="seats-grid">
+          <div class="seats-grid" :style="gridColumnsStyle(columnCount)">
             <div 
-              v-for="(seat, index) in seatsList" 
+              v-for="(seat, index) in visibleSeats"
               :key="seat.id"
               :class="['seat-card', { 'is-hidden-seat': seat.isHidden }]"
               draggable="true"
@@ -237,10 +244,10 @@
               <div class="history-seating-preview" v-if="historyLayoutData">
                 <div class="seating-wrapper" style="transform: scale(0.85); transform-origin: top center;">
                   <div :class="['seating-area', { 'is-rotated': historyLayoutData.isRotated }]">
-                    <div class="labels-grid-readonly">
-                      <div v-for="n in 6" :key="'h-label-'+n" class="row-label-readonly">第{{ n }}排</div>
+                    <div class="labels-grid-readonly" :style="gridColumnsStyle(historyLayoutData.columnCount || 6)">
+                      <div v-for="n in (historyLayoutData.columnCount || 6)" :key="'h-label-'+n" class="row-label-readonly">第{{ n }}排</div>
                     </div>
-                    <div class="seats-grid-readonly">
+                    <div class="seats-grid-readonly" :style="gridColumnsStyle(historyLayoutData.columnCount || 6)">
                       <div v-for="seat in historyLayoutData.seats" :key="seat.id" :class="['seat-card-readonly', { 'is-hidden-seat-readonly': seat.isHidden }]">
                         <div class="seat-id-readonly">{{ seat.id }}</div>
                         <div class="seat-text-container">
@@ -297,7 +304,7 @@
       <div class="print-page-header">{{ printData.title }} 共 {{ printData.count }} 人 實施日期：{{ printData.date }}</div>
       <table class="print-seat-table">
         <tr v-for="rowIndex in 5" :key="'p-row-'+rowIndex">
-          <td v-for="colIndex in 6" :key="'p-col-'+colIndex">
+          <td v-for="colIndex in columnCount" :key="'p-col-'+colIndex" :style="{ width: `${100 / columnCount}%` }">
             <template v-if="!getPrintSeat(rowIndex, colIndex).isHidden">
               <div class="p-name">{{ getPrintSeat(rowIndex, colIndex).name }}</div>
               <div class="p-other" v-if="getPrintSeat(rowIndex, colIndex).other">({{ getPrintSeat(rowIndex, colIndex).other }})</div>
@@ -306,7 +313,7 @@
             </template>
           </td>
         </tr>
-        <tr><td v-for="n in 6" :key="'p-label-'+n" class="p-col-label">{{ n }}</td></tr>
+        <tr><td v-for="n in columnCount" :key="'p-label-'+n" class="p-col-label">{{ n }}</td></tr>
       </table>
       <div class="print-desk-wrapper"><div class="print-desk">講桌</div></div>
       <div class="print-roles-title">幹部和小老師名冊</div>
@@ -326,7 +333,7 @@ import { beginVisitorSession, endVisitorSession, resumeVisitorSession } from '..
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { exportSeatingModeJson, exportSeatingModeCsv, importSeatingModeJson, importSeatingModeCsv } from '../utils/seatingModeFiles.js'
 import { isValidExamDate, taiwanDateISO } from '../utils/examSchedule.js'
-import { emptySeatingMode, normalizeSeatingSchedule, resolveSeatingLayout, resolveSeatingMode } from '../utils/seatingSchedule.js'
+import { emptySeatingMode, normalizeSeatingColumnCount, normalizeSeatingSchedule, resolveSeatingLayout, resolveSeatingMode } from '../utils/seatingSchedule.js'
 const supabase = useSupabaseClient()
 
 const isLoggedIn = ref(false)
@@ -368,12 +375,15 @@ const isVisibleOnIndex = ref(true)
 const seatsList = ref([])
 const seatSettings = ref({})
 const printData = ref({})
+const columnCount = ref(6)
+const visibleSeats = computed(() => seatsList.value.slice(0, columnCount.value * 5))
+const gridColumnsStyle = count => ({ gridTemplateColumns: `repeat(${normalizeSeatingColumnCount(count)}, minmax(0, 1fr))` })
 
 // 初始化輔助函數
-const initSeats = () => Array.from({ length: 30 }, (_, i) => ({ id: i + 1, seatNum: `${i + 1}號`, name: '', other: '', isHidden: false }))
+const initSeats = (columns = 6) => Array.from({ length: normalizeSeatingColumnCount(columns) * 5 }, (_, i) => ({ id: i + 1, seatNum: `${i + 1}號`, name: '', other: '', isHidden: false }))
 const defaultSeatSettings = () => ({ numberSize: 16, numberColor: '#64748b', nameSize: 20, nameColor: '#e11d48', otherSize: 14, otherColor: '#94a3b8' })
 const defaultPrintData = (title) => ({ title: title, count: 30, date: new Date().toLocaleDateString('zh-TW'), rolesLeft: '班長：\n副班長：\n風紀股長：\n學藝股長：\n康樂（體育）股長：\n衛生股長：\n副衛生股長：\n輔導股長：\n圖資股長：\n總務股長：', rolesRight: '國文小老師：\n英語小老師：\n數學小老師：\n自然小老師：\n社會小老師：\n表演藝術小老師：\n美術小老師：\n音樂小老師：\n綜合小老師：\n生活科技小老師：' })
-const generateDefaultMode = (title) => ({ seats: initSeats(), isRotated: false, isVisible: true, settings: defaultSeatSettings(), printData: defaultPrintData(title) })
+const generateDefaultMode = (title) => ({ columnCount: 6, seats: initSeats(), isRotated: false, isVisible: true, settings: defaultSeatSettings(), printData: defaultPrintData(title) })
 
 // 存放所有模式的記憶體池
 const defaultModes = () => ({
@@ -436,6 +446,7 @@ const logout = () => { void endVisitorSession('導師登出'); sessionStorage.re
 // === 💡 多模式核心邏輯 ===
 const syncEditorToMemory = () => {
   modesData.value[currentEditMode.value] = {
+    columnCount: columnCount.value,
     seats: JSON.parse(JSON.stringify(seatsList.value)),
     isRotated: isRotated.value,
     isVisible: isVisibleOnIndex.value,
@@ -447,12 +458,40 @@ const syncEditorToMemory = () => {
 const loadMemoryToEditor = (modeKey) => {
   const defaults = defaultModes()[modeKey]
   const data = { ...defaults, ...modesData.value[modeKey] }
-  seatsList.value = JSON.parse(JSON.stringify(data.seats || defaults.seats))
+  columnCount.value = normalizeSeatingColumnCount(data.columnCount, data.seats)
+  const targetCount = columnCount.value * 5
+  const loadedSeats = JSON.parse(JSON.stringify(data.seats || defaults.seats)).slice(0, targetCount)
+  while (loadedSeats.length < targetCount) {
+    const index = loadedSeats.length
+    loadedSeats.push({ id: index + 1, seatNum: `${index + 1}號`, name: '', other: '', isHidden: false })
+  }
+  seatsList.value = loadedSeats
   isRotated.value = data.isRotated
   isVisibleOnIndex.value = data.isVisible
   seatSettings.value = { ...defaults.settings, ...data.settings }
   printData.value = { ...defaults.printData, ...data.printData }
   currentEditMode.value = modeKey
+}
+
+const changeColumnCount = (next, event) => {
+  const columns = normalizeSeatingColumnCount(next)
+  if (columns === columnCount.value) return
+  const targetCount = columns * 5
+  if (columns === 6) {
+    const removed = seatsList.value.slice(targetCount)
+    const hasContent = removed.some(seat => seat.name || seat.other || (seat.seatNum && seat.seatNum !== `${seat.id}號`))
+    if (hasContent && !confirm('切換為六排會移除第 31–35 個位置及其中內容，確定繼續嗎？')) {
+      if (event?.target) event.target.value = String(columnCount.value)
+      return
+    }
+    seatsList.value = seatsList.value.slice(0, targetCount).map((seat, index) => ({ ...seat, id: index + 1 }))
+  } else {
+    while (seatsList.value.length < targetCount) {
+      const index = seatsList.value.length
+      seatsList.value.push({ id: index + 1, seatNum: `${index + 1}號`, name: '', other: '', isHidden: false })
+    }
+  }
+  columnCount.value = columns
 }
 
 const switchMode = (newModeKey) => {
@@ -478,7 +517,7 @@ const removeModeStart = date => { modeStarts.value = modeStarts.value.filter(ite
 
 const clearCurrentMode = () => {
   if (!confirm(`確定清空「${currentModeLabel.value}」的全部座位、文字設定與列印設定嗎？此模式若排程顯示在首頁，儲存後也會顯示空白座位。`)) return
-  modesData.value[currentEditMode.value] = emptySeatingMode()
+  modesData.value[currentEditMode.value] = emptySeatingMode(columnCount.value)
   loadMemoryToEditor(currentEditMode.value)
   alert('此模式已清空。按「儲存所有模式」才會寫入資料庫。')
 }
@@ -569,6 +608,7 @@ const fetchLayout = async () => {
         return seat
       })
       modesData.value.normal.seats = legacySeats
+      modesData.value.normal.columnCount = normalizeSeatingColumnCount(val.columnCount, legacySeats)
       modesData.value.normal.isRotated = val.isRotated || false
       modesData.value.normal.isVisible = val.isVisible !== undefined ? val.isVisible : true
       if (val.settings) modesData.value.normal.settings = { ...modesData.value.normal.settings, ...val.settings }
@@ -637,8 +677,8 @@ const onDrop = (event, dropIndex) => {
 const toggleRotation = () => { isRotated.value = !isRotated.value }
 
 const getPrintSeat = (row, col) => {
-  let index = (row - 1) * 6 + (col - 1)
-  if (isRotated.value) index = 29 - index
+  let index = (row - 1) * columnCount.value + (col - 1)
+  if (isRotated.value) index = (columnCount.value * 5 - 1) - index
   return seatsList.value[index] || { isHidden: true }
 }
 
