@@ -25,7 +25,7 @@
 
     <!-- 班級衛生工作顯示區 -->
     <div v-if="hygieneData.isVisibleOnIndex && showHygieneLocal && indexButtonSettings.showHygiene" class="hygiene-display-board">
-      <h3 class="hygiene-main-title">🧹 班級衛生工作管理</h3>
+      <h3 class="hygiene-main-title">🧹 班級衛生工作管理<span v-if="hygieneData.planLabel">（{{ hygieneData.planLabel }}）</span></h3>
       <div class="tabs-container-readonly">
         <button class="tab-btn" :class="{ active: activeHygieneTab === 'morning' }" @click="activeHygieneTab = 'morning'">🌅 早上掃地</button>
         <button class="tab-btn" :class="{ active: activeHygieneTab === 'lunch' }" @click="activeHygieneTab = 'lunch'">🍱 中午搬餐</button>

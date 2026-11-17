@@ -44,6 +44,25 @@
         </div>
       </header>
 
+      <section class="plan-panel screen-only" aria-label="衛生方案管理">
+        <div class="plan-tabs">
+          <strong>目前編輯：</strong>
+          <button v-for="plan in hygienePlanIds" :key="plan" type="button" :class="{ active: activePlan === plan }" @click="switchPlan(plan)">{{ plan }} 方案</button>
+        </div>
+        <div class="plan-settings">
+          <label>首頁顯示方案
+            <select v-model="d.homepagePlan" :disabled="!isEditing">
+              <option v-for="plan in hygienePlanIds" :key="plan" :value="plan">{{ plan }} 方案</option>
+            </select>
+          </label>
+          <label>{{ activePlan }} 方案開始實施日期
+            <input v-model="d.planStartDates[activePlan]" type="date" :disabled="!isEditing" />
+          </label>
+          <span class="plan-status">首頁目前指定：{{ d.homepagePlan }} 方案<span v-if="d.planStartDates[d.homepagePlan]">（{{ d.planStartDates[d.homepagePlan] }} 起）</span></span>
+        </div>
+        <p>每套方案都保有獨立的早掃、中午搬餐、小隊工作及歷史紀錄。開始日前，該方案不會顯示在首頁。</p>
+      </section>
+
       <!-- 分頁標籤 -->
       <div class="tabs-container screen-only">
         <button class="tab-btn" :class="{ active: activeTab === 'morning' }" @click="activeTab = 'morning'">🌅 早上掃地管理</button>
@@ -354,6 +373,7 @@ import { beginVisitorSession, endVisitorSession, resumeVisitorSession } from '..
 import { computed, ref, onMounted, defineComponent, h } from 'vue'
 import { hygieneAssignmentReport, sanitizeHygieneAssignments } from '../utils/hygieneAssignments.js'
 import { deleteHygieneRecord, exportHygieneHistory, hygieneTabs, importHygieneHistory, normalizeHygieneHistory, resolveHygieneSection, setHygieneRecord, validHygieneDate } from '../utils/hygieneHistory.js'
+import { hygienePlanIds, normalizeHygienePlans } from '../utils/hygienePlans.js'
 import { taiwanDateISO } from '../utils/examSchedule.js'
 const supabase = useSupabaseClient()
 
@@ -389,6 +409,8 @@ const passwordInput = ref('')
 const isEditing = ref(false)
 const isSaving = ref(false)
 const activeTab = ref('morning')
+const activePlan = ref('A')
+const planRoot = ref(null)
 const tabNames = { morning: '早上掃地', lunch: '中午搬餐', squad: '小隊工作' }
 const todayTaiwan = taiwanDateISO()
 const selectedDates = ref({ morning: todayTaiwan, lunch: todayTaiwan, squad: todayTaiwan })
@@ -472,8 +494,21 @@ const defaultData = {
   }
 }
 
-const d = ref(JSON.parse(JSON.stringify(defaultData))) 
-storedData.value = JSON.parse(JSON.stringify(defaultData))
+const d = ref(JSON.parse(JSON.stringify(defaultData)))
+planRoot.value = normalizeHygienePlans(defaultData, defaultData)
+
+const loadPlan = plan => {
+  const current = JSON.parse(JSON.stringify(planRoot.value.plans[plan]))
+  storedData.value = { ...current, history: normalizeHygieneHistory(current.history) }
+  d.value = {
+    ...JSON.parse(JSON.stringify(storedData.value)),
+    isVisibleOnIndex: planRoot.value.isVisibleOnIndex,
+    homepagePlan: planRoot.value.homepagePlan,
+    planStartDates: { ...planRoot.value.planStartDates }
+  }
+  for (const tab of hygieneTabs) d.value[tab] = resolveHygieneSection(storedData.value, tab, selectedDates.value[tab]).section
+}
+loadPlan('A')
 
 onMounted(async () => {
   if (sessionStorage.getItem('hygiene_admin_logged_in') === 'true') {
@@ -524,44 +559,30 @@ const fetchLayout = async () => {
   const { data } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'hygiene_management_data').maybeSingle()
   if (data?.setting_value) {
     const dbData = data.setting_value
-    const baseData = JSON.parse(JSON.stringify(defaultData))
-    
-    d.value = { 
-      ...baseData, 
-      ...dbData,
-      nameFontSize: dbData.nameFontSize || 24, // 💡 載入儲存的字體大小
-      morning: { ...baseData.morning, ...(dbData.morning || {}) },
-      lunch: { ...baseData.lunch, ...(dbData.lunch || {}) },
-      squad: { ...baseData.squad, ...(dbData.squad || {}) }
-    }
-
-    if (!d.value.morning.out_dynamic_areas || d.value.morning.out_dynamic_areas.length === 0) {
-      const m = d.value.morning;
-      const migrated = [];
-      if (m.out_hygiene || m.out_hygiene_names || m.out_hygiene_work) {
-        migrated.push({ area: m.out_hygiene || '', names: m.out_hygiene_names || '', work: m.out_hygiene_work || '' });
-      }
-      if (m.out_sweep1 || m.out_sweep1_names || m.out_sweep2_names || m.out_sweep3_names || m.out_sweep_work) {
-        const names = [m.out_sweep1_names, m.out_sweep2_names, m.out_sweep3_names].filter(Boolean).join('\n');
-        migrated.push({ area: m.out_sweep1 || '', names: names, work: m.out_sweep_work || '' });
-      }
-      if (migrated.length === 0) {
-        migrated.push({ area: '', names: '', work: '' });
-      }
-      d.value.morning.out_dynamic_areas = migrated;
-    }
-
-    const sanitized = sanitizeHygieneAssignments(d.value)
-    if (JSON.stringify(sanitized) !== JSON.stringify(d.value)) {
-      const { error } = await supabase.from('system_settings').upsert({ setting_key: 'hygiene_management_data', setting_value: sanitized }, { onConflict: 'setting_key' })
+    const normalized = normalizeHygienePlans(dbData, defaultData)
+    if (JSON.stringify(normalized) !== JSON.stringify(dbData)) {
+      const { error } = await supabase.from('system_settings').upsert({ setting_key: 'hygiene_management_data', setting_value: normalized }, { onConflict: 'setting_key' })
       migrationError.value = error ? '舊姓名已從畫面隱藏，但資料庫清理失敗；請稍後按「儲存所有變更」重試。' : ''
     }
-    storedData.value = { ...sanitized, history: normalizeHygieneHistory(sanitized.history) }
+    planRoot.value = normalized
   }
-  for (const tab of hygieneTabs) d.value[tab] = resolveHygieneSection(storedData.value, tab, selectedDates.value[tab]).section
+  activePlan.value = hygienePlanIds.includes(planRoot.value.homepagePlan) ? planRoot.value.homepagePlan : 'A'
+  loadPlan(activePlan.value)
 }
 
 const hasUnsavedSection = tab => JSON.stringify(d.value[tab]) !== JSON.stringify(resolveHygieneSection(storedData.value, tab, selectedDates.value[tab]).section)
+const switchPlan = plan => {
+  if (!hygienePlanIds.includes(plan) || plan === activePlan.value) return
+  const hasUnsaved = hygieneTabs.some(hasUnsavedSection)
+  if (isEditing.value && hasUnsaved && !confirm('目前方案有尚未儲存的內容。要放棄變更並切換方案嗎？')) return
+  planRoot.value.isVisibleOnIndex = d.value.isVisibleOnIndex
+  planRoot.value.homepagePlan = d.value.homepagePlan
+  planRoot.value.planStartDates = { ...d.value.planStartDates }
+  activePlan.value = plan
+  selectedDates.value = { morning: todayTaiwan, lunch: todayTaiwan, squad: todayTaiwan }
+  calendarMonth.value = todayTaiwan.slice(0, 7)
+  loadPlan(plan)
+}
 const selectHistoryDate = date => {
   if (!validHygieneDate(date)) return
   const tab = activeTab.value
@@ -577,11 +598,20 @@ const shiftCalendarMonth = offset => {
 }
 const persistHistoryData = async next => {
   const sanitized = sanitizeHygieneAssignments(next)
-  const { error } = await supabase.from('system_settings').upsert({ setting_key: 'hygiene_management_data', setting_value: sanitized }, { onConflict: 'setting_key' })
+  planRoot.value = normalizeHygienePlans({
+    ...planRoot.value,
+    isVisibleOnIndex: d.value.isVisibleOnIndex,
+    homepagePlan: d.value.homepagePlan,
+    planStartDates: d.value.planStartDates,
+    plans: { ...planRoot.value.plans, [activePlan.value]: sanitized }
+  }, defaultData)
+  const { error } = await supabase.from('system_settings').upsert({ setting_key: 'hygiene_management_data', setting_value: planRoot.value }, { onConflict: 'setting_key' })
   if (error) throw error
-  storedData.value = sanitized
-  d.value.isVisibleOnIndex = sanitized.isVisibleOnIndex
-  d.value.nameFontSize = sanitized.nameFontSize
+  storedData.value = planRoot.value.plans[activePlan.value]
+  d.value.isVisibleOnIndex = planRoot.value.isVisibleOnIndex
+  d.value.homepagePlan = planRoot.value.homepagePlan
+  d.value.planStartDates = { ...planRoot.value.planStartDates }
+  d.value.nameFontSize = storedData.value.nameFontSize
   migrationError.value = ''
 }
 const deleteSelectedHistory = async () => {
@@ -658,7 +688,6 @@ const saveData = async () => {
   isSaving.value = true
   try {
     const next = JSON.parse(JSON.stringify(storedData.value))
-    next.isVisibleOnIndex = d.value.isVisibleOnIndex
     next.nameFontSize = d.value.nameFontSize
     for (const tab of hygieneTabs) {
       if (hasUnsavedSection(tab)) next.history = setHygieneRecord(next.history, tab, selectedDates.value[tab], d.value[tab])
@@ -795,6 +824,17 @@ const generateWord = () => {
 .btn-edit.editing { background: #f59e0b; color: white; }
 .btn-save { background: #10b981; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; }
 .btn-logout { background: #ef4444; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+
+.plan-panel { margin: 14px 0; padding: 14px 18px; border: 1px solid #a5f3fc; border-radius: 9px; background: #ecfeff; }
+.plan-tabs, .plan-settings { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.plan-tabs button { padding: 8px 18px; border: 1px solid #0891b2; border-radius: 7px; background: white; color: #0e7490; font-weight: 800; cursor: pointer; }
+.plan-tabs button.active { background: #0891b2; color: white; }
+.plan-settings { margin-top: 12px; }
+.plan-settings label { display: flex; align-items: center; gap: 7px; font-weight: 700; color: #334155; }
+.plan-settings select, .plan-settings input { padding: 7px; border: 1px solid #94a3b8; border-radius: 6px; background: white; }
+.plan-settings select:disabled, .plan-settings input:disabled { opacity: .75; }
+.plan-status { padding: 6px 10px; border-radius: 999px; background: #cffafe; color: #155e75; font-weight: 700; }
+.plan-panel p { margin: 10px 0 0; color: #475569; font-size: .9rem; }
 
 .tabs-container { display: flex; background: white; padding: 10px 25px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); gap: 10px; margin-bottom: 20px; overflow-x: auto; white-space: nowrap;}
 .tab-btn { padding: 8px 16px; border: none; background: transparent; color: #64748b; font-weight: bold; font-size: 1.05rem; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s;}

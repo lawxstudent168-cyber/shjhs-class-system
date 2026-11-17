@@ -8,7 +8,7 @@ import { normalizeMediaSchedule } from '../utils/mediaSchedule.js'
 import { resolveSeatingLayout } from '../utils/seatingSchedule.js'
 import { normalizeRoleButtonSettings } from '../utils/homeButtonSettings.js'
 import { sanitizeHygieneAssignments } from '../utils/hygieneAssignments.js'
-import { resolveHygieneForDate } from '../utils/hygieneHistory.js'
+import { resolveHomepageHygiene } from '../utils/hygienePlans.js'
 
 export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCategoryRef, currentIdentityRef, allStudentsRef, allStudentsForLoginRef, todayAttendancesRef, nowTickRef) {
   const attendanceLockTime = ref('08:00')
@@ -60,7 +60,7 @@ export function useHomeData(supabase, todayISO, isIpBrownlistedRef, activeRoleCa
   const seatingChart = computed(() => resolveSeatingLayout(savedSeatingData.value, examDayISO.value))
   const defaultHygieneData = { isVisibleOnIndex: false, morning: {}, lunch: {}, squad: {} }
   const savedHygieneData = ref(JSON.parse(JSON.stringify(defaultHygieneData)))
-  const hygieneData = computed(() => resolveHygieneForDate(savedHygieneData.value, examDayISO.value))
+  const hygieneData = computed(() => resolveHomepageHygiene(savedHygieneData.value, examDayISO.value, defaultHygieneData))
   const marqueeSettings = ref({})
   const unreadMsgCount = ref(0)
   const assignmentsData = ref([])
