@@ -1,7 +1,7 @@
 import { sanitizeHygieneAssignments } from './hygieneAssignments.js'
 import { resolveHygieneForDate, validHygieneDate } from './hygieneHistory.js'
 
-export const hygienePlanIds = ['A', 'B', 'C']
+export const hygienePlanIds = ['A', 'B', 'C', 'D', 'E']
 const copy = value => JSON.parse(JSON.stringify(value))
 const validPlan = value => hygienePlanIds.includes(value) ? value : 'A'
 
@@ -44,12 +44,21 @@ export function normalizeHygienePlans(value, defaultPlan = {}) {
 
 export function resolveHomepageHygiene(value, date, defaultPlan = {}) {
   const normalized = normalizeHygienePlans(value, defaultPlan)
-  const planId = normalized.homepagePlan
+  const effectivePlans = hygienePlanIds
+    .map((id, index) => ({ id, index, startDate: normalized.planStartDates[id] }))
+    .filter(plan => plan.startDate && plan.startDate <= date)
+    .sort((left, right) => left.startDate.localeCompare(right.startDate)
+      || Number(left.id === normalized.homepagePlan) - Number(right.id === normalized.homepagePlan)
+      || left.index - right.index)
+  const fallbackPlan = normalized.planStartDates[normalized.homepagePlan]
+    ? hygienePlanIds.find(id => !normalized.planStartDates[id]) || 'A'
+    : normalized.homepagePlan
+  const planId = effectivePlans.at(-1)?.id || fallbackPlan
   const startDate = normalized.planStartDates[planId]
   const resolved = resolveHygieneForDate(normalized.plans[planId], date)
   return {
     ...resolved,
-    isVisibleOnIndex: normalized.isVisibleOnIndex && (!startDate || date >= startDate),
+    isVisibleOnIndex: normalized.isVisibleOnIndex,
     activePlan: planId,
     planLabel: `${planId} 方案`,
     startDate

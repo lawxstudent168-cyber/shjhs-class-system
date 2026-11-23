@@ -50,7 +50,7 @@
           <button v-for="plan in hygienePlanIds" :key="plan" type="button" :class="{ active: activePlan === plan }" @click="switchPlan(plan)">{{ plan }} 方案</button>
         </div>
         <div class="plan-settings">
-          <label>首頁顯示方案
+          <label>首頁基準方案
             <select v-model="d.homepagePlan" :disabled="!isEditing">
               <option v-for="plan in hygienePlanIds" :key="plan" :value="plan">{{ plan }} 方案</option>
             </select>
@@ -58,9 +58,18 @@
           <label>{{ activePlan }} 方案開始實施日期
             <input v-model="d.planStartDates[activePlan]" type="date" :disabled="!isEditing" />
           </label>
-          <span class="plan-status">首頁目前指定：{{ d.homepagePlan }} 方案<span v-if="d.planStartDates[d.homepagePlan]">（{{ d.planStartDates[d.homepagePlan] }} 起）</span></span>
+          <span class="plan-status">首頁今天自動顯示：{{ homepagePreviewPlan }} 方案</span>
         </div>
-        <p>每套方案都保有獨立的早掃、中午搬餐、小隊工作及歷史紀錄。開始日前，該方案不會顯示在首頁。</p>
+        <div class="plan-actions">
+          <label>複製 {{ activePlan }} 方案全部內容到
+            <select v-model="copyTargetPlan" :disabled="!isEditing || isSaving">
+              <option v-for="plan in copyTargetOptions" :key="plan" :value="plan">{{ plan }} 方案</option>
+            </select>
+          </label>
+          <button type="button" @click="copyActivePlan" :disabled="!isEditing || isSaving">📋 完整複製</button>
+          <button type="button" class="danger" @click="clearActivePlanSeats" :disabled="!isEditing || isSaving">🧹 清空 {{ activePlan }} 方案全部座號</button>
+        </div>
+        <p>系統會依開始日期，自動顯示「今天已生效且日期最新」的方案；尚未到期時會繼續顯示上一方案。完整複製包含三個分頁與全部歷史紀錄，但不會改變目標方案的開始日期。</p>
       </section>
 
       <!-- 分頁標籤 -->
@@ -371,9 +380,9 @@
 <script setup>
 import { beginVisitorSession, endVisitorSession, resumeVisitorSession } from '../utils/visitorTrackingClient.js'
 import { computed, ref, onMounted, defineComponent, h } from 'vue'
-import { hygieneAssignmentReport, sanitizeHygieneAssignments } from '../utils/hygieneAssignments.js'
+import { clearHygieneSeatAssignments, hygieneAssignmentReport, sanitizeHygieneAssignments } from '../utils/hygieneAssignments.js'
 import { deleteHygieneRecord, exportHygieneHistory, hygieneTabs, importHygieneHistory, normalizeHygieneHistory, resolveHygieneSection, setHygieneRecord, validHygieneDate } from '../utils/hygieneHistory.js'
-import { hygienePlanIds, normalizeHygienePlans } from '../utils/hygienePlans.js'
+import { hygienePlanIds, normalizeHygienePlans, resolveHomepageHygiene } from '../utils/hygienePlans.js'
 import { taiwanDateISO } from '../utils/examSchedule.js'
 const supabase = useSupabaseClient()
 
@@ -410,6 +419,7 @@ const isEditing = ref(false)
 const isSaving = ref(false)
 const activeTab = ref('morning')
 const activePlan = ref('A')
+const copyTargetPlan = ref('B')
 const planRoot = ref(null)
 const tabNames = { morning: '早上掃地', lunch: '中午搬餐', squad: '小隊工作' }
 const todayTaiwan = taiwanDateISO()
@@ -421,6 +431,13 @@ const studentSeatNumbers = ref([])
 const studentSeatsLoaded = ref(false)
 const migrationError = ref('')
 const activeReport = computed(() => hygieneAssignmentReport(d.value, activeTab.value, studentSeatNumbers.value))
+const copyTargetOptions = computed(() => hygienePlanIds.filter(plan => plan !== activePlan.value))
+const homepagePreviewPlan = computed(() => resolveHomepageHygiene({
+  ...planRoot.value,
+  isVisibleOnIndex: d.value.isVisibleOnIndex,
+  homepagePlan: d.value.homepagePlan,
+  planStartDates: d.value.planStartDates
+}, todayTaiwan, defaultData).activePlan)
 const activeEffectiveDate = computed(() => resolveHygieneSection(storedData.value || defaultData, activeTab.value, selectedDates.value[activeTab.value]).effectiveDate)
 const hasSelectedRecord = computed(() => normalizeHygieneHistory(storedData.value?.history)[activeTab.value].some(item => item.date === selectedDates.value[activeTab.value]))
 const calendarDays = computed(() => {
@@ -579,9 +596,59 @@ const switchPlan = plan => {
   planRoot.value.homepagePlan = d.value.homepagePlan
   planRoot.value.planStartDates = { ...d.value.planStartDates }
   activePlan.value = plan
+  copyTargetPlan.value = hygienePlanIds.find(id => id !== plan) || 'A'
   selectedDates.value = { morning: todayTaiwan, lunch: todayTaiwan, squad: todayTaiwan }
   calendarMonth.value = todayTaiwan.slice(0, 7)
   loadPlan(plan)
+}
+const persistPlanCollection = async next => {
+  const normalized = normalizeHygienePlans(next, defaultData)
+  const { error } = await supabase.from('system_settings').upsert({ setting_key: 'hygiene_management_data', setting_value: normalized }, { onConflict: 'setting_key' })
+  if (error) throw error
+  planRoot.value = normalized
+  loadPlan(activePlan.value)
+  migrationError.value = ''
+}
+const copyActivePlan = async () => {
+  const target = copyTargetPlan.value
+  if (!isEditing.value || !hygienePlanIds.includes(target) || target === activePlan.value) return
+  if (hygieneTabs.some(hasUnsavedSection)) {
+    alert('請先儲存目前正在編輯的內容，再複製方案。')
+    return
+  }
+  if (!confirm(`確定以 ${activePlan.value} 方案的全部內容及歷史紀錄，覆蓋 ${target} 方案嗎？`)) return
+  isSaving.value = true
+  try {
+    const source = JSON.parse(JSON.stringify(planRoot.value.plans[activePlan.value]))
+    await persistPlanCollection({
+      ...planRoot.value,
+      isVisibleOnIndex: d.value.isVisibleOnIndex,
+      homepagePlan: d.value.homepagePlan,
+      planStartDates: d.value.planStartDates,
+      plans: { ...planRoot.value.plans, [target]: source }
+    })
+    alert(`✅ 已將 ${activePlan.value} 方案完整複製到 ${target} 方案。`)
+  } catch { alert('❌ 複製失敗，請稍後重試。') } finally { isSaving.value = false }
+}
+const clearActivePlanSeats = async () => {
+  if (!isEditing.value) return
+  if (hygieneTabs.some(hasUnsavedSection)) {
+    alert('請先儲存或放棄目前正在編輯的內容，再清空座號。')
+    return
+  }
+  if (!confirm(`確定清空 ${activePlan.value} 方案三個分頁及全部歷史紀錄中的所有座號嗎？工作項目與說明文字會保留。`)) return
+  isSaving.value = true
+  try {
+    const cleared = clearHygieneSeatAssignments(planRoot.value.plans[activePlan.value])
+    await persistPlanCollection({
+      ...planRoot.value,
+      isVisibleOnIndex: d.value.isVisibleOnIndex,
+      homepagePlan: d.value.homepagePlan,
+      planStartDates: d.value.planStartDates,
+      plans: { ...planRoot.value.plans, [activePlan.value]: cleared }
+    })
+    alert(`✅ 已清空 ${activePlan.value} 方案的全部座號。`)
+  } catch { alert('❌ 清空失敗，請稍後重試。') } finally { isSaving.value = false }
 }
 const selectHistoryDate = date => {
   if (!validHygieneDate(date)) return
@@ -826,14 +893,19 @@ const generateWord = () => {
 .btn-logout { background: #ef4444; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; }
 
 .plan-panel { margin: 14px 0; padding: 14px 18px; border: 1px solid #a5f3fc; border-radius: 9px; background: #ecfeff; }
-.plan-tabs, .plan-settings { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.plan-tabs, .plan-settings, .plan-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .plan-tabs button { padding: 8px 18px; border: 1px solid #0891b2; border-radius: 7px; background: white; color: #0e7490; font-weight: 800; cursor: pointer; }
 .plan-tabs button.active { background: #0891b2; color: white; }
 .plan-settings { margin-top: 12px; }
 .plan-settings label { display: flex; align-items: center; gap: 7px; font-weight: 700; color: #334155; }
-.plan-settings select, .plan-settings input { padding: 7px; border: 1px solid #94a3b8; border-radius: 6px; background: white; }
+.plan-settings select, .plan-settings input, .plan-actions select { padding: 7px; border: 1px solid #94a3b8; border-radius: 6px; background: white; }
 .plan-settings select:disabled, .plan-settings input:disabled { opacity: .75; }
 .plan-status { padding: 6px 10px; border-radius: 999px; background: #cffafe; color: #155e75; font-weight: 700; }
+.plan-actions { margin-top: 10px; }
+.plan-actions label { display: flex; align-items: center; gap: 7px; font-weight: 700; color: #334155; }
+.plan-actions button { padding: 7px 11px; border: 1px solid #0891b2; border-radius: 6px; background: white; color: #0e7490; font-weight: 800; cursor: pointer; }
+.plan-actions button.danger { border-color: #dc2626; color: #b91c1c; }
+.plan-actions button:disabled { opacity: .55; cursor: not-allowed; }
 .plan-panel p { margin: 10px 0 0; color: #475569; font-size: .9rem; }
 
 .tabs-container { display: flex; background: white; padding: 10px 25px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); gap: 10px; margin-bottom: 20px; overflow-x: auto; white-space: nowrap;}

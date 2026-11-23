@@ -52,6 +52,31 @@ export function sanitizeHygieneAssignments(data) {
   return { ...data, morning: cleanSection(data.morning, 'morning'), lunch: cleanSection(data.lunch, 'lunch'), squad: cleanSection(data.squad, 'squad'), history }
 }
 
+export function clearHygieneSeatAssignments(data) {
+  if (!data || typeof data !== 'object') return data
+  const clearSection = (section, tab) => {
+    const result = { ...(section || {}) }
+    if (tab === 'morning') {
+      for (const field of morningFields) if (field in result) result[field] = ''
+      if (Array.isArray(result.out_dynamic_areas)) result.out_dynamic_areas = result.out_dynamic_areas.map(item => ({ ...item, names: '' }))
+    }
+    if (tab === 'lunch') for (const field of lunchFields) if (field in result) result[field] = ''
+    if (tab === 'squad') for (const field of squadFields) if (Array.isArray(result[field])) result[field] = result[field].map(() => '')
+    return result
+  }
+  const history = { ...(data.history || {}) }
+  for (const tab of ['morning', 'lunch', 'squad']) {
+    if (Array.isArray(history[tab])) history[tab] = history[tab].map(item => ({ ...item, data: clearSection(item?.data, tab) }))
+  }
+  return {
+    ...data,
+    morning: clearSection(data.morning, 'morning'),
+    lunch: clearSection(data.lunch, 'lunch'),
+    squad: clearSection(data.squad, 'squad'),
+    history
+  }
+}
+
 export function hygieneAssignmentReport(data, tab, studentSeatNumbers) {
   const valid = [...new Set((studentSeatNumbers || []).map(seatKey).filter(Boolean))].sort((a, b) => Number(a) - Number(b))
   const validSet = new Set(valid)
