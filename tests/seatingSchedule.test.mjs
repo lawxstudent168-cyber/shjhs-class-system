@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { emptySeatingMode, normalizeSeatingSchedule, resolveSeatingLayout, resolveSeatingMode } from '../app/utils/seatingSchedule.js'
+import { emptySeatingMode, normalizeSeatingSchedule, resolveSeatingLayout, resolveSeatingMode, seatingSeatHasPerson } from '../app/utils/seatingSchedule.js'
 import { readFileSync } from 'node:fs'
 import { taiwanDateISO } from '../app/utils/examSchedule.js'
 
@@ -54,6 +54,15 @@ test('six and seven column layouts preserve their selected column count', () => 
   assert.equal(resolved.columnCount, 7)
   assert.equal(resolved.seats.length, 35)
   assert.equal(resolveSeatingLayout({ seats: Array.from({ length: 30 }, (_, id) => ({ id })) }, '2026-11-17').columnCount, 6)
+})
+
+test('compact and exam seat maps treat a seat without a name as an empty physical slot', () => {
+  assert.equal(seatingSeatHasPerson({ seatNum: '31號', name: '' }), false)
+  assert.equal(seatingSeatHasPerson({ seatNum: '32號', name: '   ' }), false)
+  assert.equal(seatingSeatHasPerson({ seatNum: '1號', name: '王同學' }), true)
+  const examSeatMap = readFileSync(new URL('../components/home/ExamSeatMap.vue', import.meta.url), 'utf8')
+  assert.match(examSeatMap, /seat\.isHidden \|\| !seatingSeatHasPerson\(seat\)/)
+  assert.match(examSeatMap, /seatingSeatHasPerson\(seat\).*seat\.seatNum/)
 })
 
 test('seat editor and homepage render the saved six or seven columns dynamically', () => {

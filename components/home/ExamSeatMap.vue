@@ -7,8 +7,8 @@
     <div v-if="seatingChart.seats?.length" class="exam-seats-layout" :class="{ 'is-flipped': Boolean(seatingChart.isRotated) !== flipSeats }">
       <div class="exam-seat-grid" :style="seatGridStyle">
         <div v-for="(seat, index) in seatingChart.seats" :key="seat.id ?? index"
-          class="exam-seat" :class="[seatStatusClass(seat), { 'is-hidden': seat.isHidden }]">
-          <span v-if="!seat.isHidden">{{ seat.seatNum }}</span>
+          class="exam-seat" :class="[seatStatusClass(seat), { 'is-hidden': seat.isHidden || !seatingSeatHasPerson(seat) }]">
+          <span v-if="!seat.isHidden && seatingSeatHasPerson(seat)">{{ seat.seatNum }}</span>
         </div>
       </div>
       <div class="exam-teacher-desk">講桌</div>
@@ -19,6 +19,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { seatingSeatHasPerson } from '../../app/utils/seatingSchedule.js'
 
 const props = defineProps({
   seatingChart: { type: Object, default: () => ({ seats: [], isRotated: false }) },

@@ -3,6 +3,7 @@ import { isValidExamDate } from './examSchedule.js'
 export const seatingModeKeys = ['normal', 'normalB', 'backup', 'backupB', 'exam', 'mock']
 const validMode = mode => seatingModeKeys.includes(mode)
 export const normalizeSeatingColumnCount = (value, seats = []) => Number(value) === 7 || (value == null && seats.length === 35) ? 7 : 6
+export const seatingSeatHasPerson = seat => String(seat?.name ?? '').trim().length > 0
 
 export function normalizeSeatingSchedule(value) {
   const starts = new Map()
