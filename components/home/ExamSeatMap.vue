@@ -5,7 +5,7 @@
       <button type="button" @click="flipSeats = !flipSeats">轉180度</button>
     </div>
     <div v-if="seatingChart.seats?.length" class="exam-seats-layout" :class="{ 'is-flipped': Boolean(seatingChart.isRotated) !== flipSeats }">
-      <div class="exam-seat-grid">
+      <div class="exam-seat-grid" :style="seatGridStyle">
         <div v-for="(seat, index) in seatingChart.seats" :key="seat.id ?? index"
           class="exam-seat" :class="[seatStatusClass(seat), { 'is-hidden': seat.isHidden }]">
           <span v-if="!seat.isHidden">{{ seat.seatNum }}</span>
@@ -18,7 +18,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   seatingChart: { type: Object, default: () => ({ seats: [], isRotated: false }) },
@@ -26,6 +26,8 @@ const props = defineProps({
   compact: { type: Boolean, default: false }
 })
 const flipSeats = ref(false)
+const seatingColumnCount = computed(() => props.seatingChart?.columnCount === 7 ? 7 : 6)
+const seatGridStyle = computed(() => ({ gridTemplateColumns: `repeat(${seatingColumnCount.value}, minmax(0, 1fr))` }))
 const seatStatusClass = seat => {
   const number = String(seat.seatNum ?? '').match(/\d+/)?.[0]
   const status = number === undefined ? null : props.statusBySeat[String(Number(number))]

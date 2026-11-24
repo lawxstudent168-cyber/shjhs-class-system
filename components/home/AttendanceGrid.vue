@@ -69,7 +69,7 @@
       </div>
       <div v-if="seatingLayout.slots.length" class="seating-scroll">
         <div class="seating-layout" :class="{ 'is-rotated': Boolean(seatingChart.isRotated) !== flipSeats }">
-          <div class="seating-grid">
+          <div class="seating-grid" :style="seatingGridStyle">
             <div v-for="slot in seatingLayout.slots" :key="slot.key" class="seat-slot" :class="{ 'is-hidden-slot': slot.isHidden }">
               <button v-if="slot.student" type="button" class="student-card" :class="getStatusClass(slot.student.id)" @click="$emit('toggle-attendance', slot.student)">
                 <div class="st-num">{{ slot.student.seat_number }}</div>
@@ -124,6 +124,8 @@ const props = defineProps({
 defineEmits(['toggle-attendance', 'update:layoutMode', 'lock-attendance', 'unlock-attendance'])
 
 const seatingLayout = computed(() => attendanceSeatingLayout(props.allStudents, props.seatingChart))
+const seatingColumnCount = computed(() => props.seatingChart?.columnCount === 7 ? 7 : 6)
+const seatingGridStyle = computed(() => ({ gridTemplateColumns: `repeat(${seatingColumnCount.value}, minmax(0, 1fr))` }))
 const flipSeats = ref(false)
 
 const isCollapsed = ref(false)
